@@ -1,0 +1,136 @@
+{
+  "metadata": {
+    "source": "synthetic:channel-comparison-frozen-example",
+    "version": "2026-11-18-v1",
+    "currency": "CNY",
+    "normalized": true,
+    "data_kind": "normalized_sample"
+  },
+  "buyers": [
+    {
+      "buyer_id": "B_ANALYSIS",
+      "display_name": "分析本人"
+    },
+    {
+      "buyer_id": "B_OTHER",
+      "display_name": "其他买家"
+    }
+  ],
+  "orders": [
+    {
+      "order_id": "A",
+      "buyer_id": "B_ANALYSIS",
+      "paid_at": "2026-10-10T00:00:00Z",
+      "paid_amount_fen": 10000,
+      "status": "paid"
+    },
+    {
+      "order_id": "B",
+      "buyer_id": "B_ANALYSIS",
+      "paid_at": "2026-10-20T00:00:00Z",
+      "paid_amount_fen": 5000,
+      "status": "paid"
+    },
+    {
+      "order_id": "C",
+      "buyer_id": "B_ANALYSIS",
+      "paid_at": "2026-11-10T00:00:00Z",
+      "paid_amount_fen": 10000,
+      "status": "paid"
+    },
+    {
+      "order_id": "D",
+      "buyer_id": "B_ANALYSIS",
+      "paid_at": "2026-11-20T00:00:00Z",
+      "paid_amount_fen": 8000,
+      "status": "paid"
+    },
+    {
+      "order_id": "X",
+      "buyer_id": "B_OTHER",
+      "paid_at": "2026-11-20T00:00:00Z",
+      "paid_amount_fen": 99900,
+      "status": "paid"
+    }
+  ],
+  "refunds": [
+    {
+      "refund_id": "RA",
+      "order_id": "A",
+      "refunded_at": "2026-10-21T00:00:00Z",
+      "refund_amount_fen": 2000,
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "RC",
+      "order_id": "C",
+      "refunded_at": "2026-11-21T00:00:00Z",
+      "refund_amount_fen": 1000,
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "RC_BOUNDARY",
+      "order_id": "C",
+      "refunded_at": "2026-12-03T00:00:00Z",
+      "refund_amount_fen": 1000,
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "RC_AFTER",
+      "order_id": "C",
+      "refunded_at": "2026-12-04T00:00:00Z",
+      "refund_amount_fen": 1000,
+      "status": "succeeded"
+    }
+  ],
+  "shops": [
+    {
+      "shop_id": "S_ANALYSIS",
+      "name": "分析本店"
+    },
+    {
+      "shop_id": "S_OTHER",
+      "name": "其他店铺"
+    }
+  ],
+  "order_shops": [
+    {
+      "order_id": "A",
+      "shop_id": "S_ANALYSIS"
+    },
+    {
+      "order_id": "B",
+      "shop_id": "S_ANALYSIS"
+    },
+    {
+      "order_id": "C",
+      "shop_id": "S_ANALYSIS"
+    },
+    {
+      "order_id": "D",
+      "shop_id": "S_ANALYSIS"
+    },
+    {
+      "order_id": "X",
+      "shop_id": "S_OTHER"
+    }
+  ],
+  "order_channels": [
+    {
+      "order_id": "A",
+      "channel": "web"
+    },
+    {
+      "order_id": "C",
+      "channel": "web"
+    },
+    {
+      "order_id": "D",
+      "channel": "app"
+    },
+    {
+      "order_id": "X",
+      "channel": "private-other"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+# 本项目独立分组，避免与已有 Yuxi 的服务和数据卷混用。
+name: datus-core
+
+services:
+  db:
+    # 复用本机已有 PostgreSQL 16 镜像；此配置不自动下载或升级。
+    image: postgres:16
+    pull_policy: never
+    environment:
+      POSTGRES_DB: datus_core
+      # 从本目录 .env 读取；为空则拒绝启动，不在文件中写真实密码。
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请先配置本目录的.env}
+    ports:
+      # 本机地址:本机端口:容器端口，仅允许本机连接。
+      - "127.0.0.1:15432:5432"
+    volumes:
+      # 数据保存在独立命名卷，停止/重建容器时可继续使用。
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      # 检查服务能否接收连接，不代表业务表和金额核查已经通过。
+      test: ["CMD-SHELL", "pg_isready -U postgres -d datus_core"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+    # 当前少量样本试运行的资源上限，不是生产容量结论。
+    mem_limit: 512m
+    cpus: 1.0
+    # 手动启动和停止，避免随 Docker 启动自动占用资源。
+    restart: "no"
+
+volumes:
+  postgres_data:

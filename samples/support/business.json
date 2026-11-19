@@ -1,0 +1,96 @@
+{
+  "metadata": {
+    "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录",
+    "version": "support-business-20261118-v1",
+    "currency": "CNY",
+    "normalized": true,
+    "data_kind": "normalized_sample"
+  },
+  "buyers": [],
+  "orders": [
+    {
+      "order_id": "O_SUPPORT_OK",
+      "buyer_id": "B001",
+      "paid_at": "2026-11-11T10:00:00+08:00",
+      "paid_amount_fen": 10000,
+      "status": "paid"
+    },
+    {
+      "order_id": "O_SUPPORT_UNKNOWN",
+      "buyer_id": "B001",
+      "paid_at": "2026-11-12T10:00:00+08:00",
+      "paid_amount_fen": 12000,
+      "status": "paid"
+    },
+    {
+      "order_id": "O_SUPPORT_CUSTOM",
+      "buyer_id": "B001",
+      "paid_at": "2026-11-14T10:00:00+08:00",
+      "paid_amount_fen": 15000,
+      "status": "paid"
+    },
+    {
+      "order_id": "O_SUPPORT_NOREASON",
+      "buyer_id": "B001",
+      "paid_at": "2026-11-15T10:00:00+08:00",
+      "paid_amount_fen": 8000,
+      "status": "paid"
+    }
+  ],
+  "refunds": [
+    {
+      "refund_id": "R_SUPPORT_A",
+      "order_id": "O_SUPPORT_OK",
+      "refund_amount_fen": 1000,
+      "refunded_at": "2026-11-16T10:00:00+08:00",
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "R_SUPPORT_B",
+      "order_id": "O_SUPPORT_UNKNOWN",
+      "refund_amount_fen": 500,
+      "refunded_at": "2026-11-16T11:00:00+08:00",
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "R_SUPPORT_C",
+      "order_id": "O_SUPPORT_CUSTOM",
+      "refund_amount_fen": 3000,
+      "refunded_at": "2026-11-17T10:00:00+08:00",
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "R_SUPPORT_D",
+      "order_id": "O_SUPPORT_NOREASON",
+      "refund_amount_fen": 1000,
+      "refunded_at": "2026-11-17T11:00:00+08:00",
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "R_SUPPORT_C2",
+      "order_id": "O_SUPPORT_CUSTOM",
+      "refund_amount_fen": 500,
+      "refunded_at": "2026-11-17T12:00:00+08:00",
+      "status": "succeeded"
+    }
+  ],
+  "shops": [],
+  "order_shops": [
+    {
+      "order_id": "O_SUPPORT_OK",
+      "shop_id": "S001"
+    },
+    {
+      "order_id": "O_SUPPORT_UNKNOWN",
+      "shop_id": "S001"
+    },
+    {
+      "order_id": "O_SUPPORT_CUSTOM",
+      "shop_id": "S001"
+    },
+    {
+      "order_id": "O_SUPPORT_NOREASON",
+      "shop_id": "S001"
+    }
+  ]
+}

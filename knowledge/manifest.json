@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "source_kind": "synthetic_demo",
+  "files": [
+    {
+      "path": "2026-10-shoes.md",
+      "sha256": "a1484930b0caaef6faa5eefd3f477d3e12fd5d2461b9346b5f0de1aa2241e262"
+    },
+    {
+      "path": "2026-11-shoes.md",
+      "sha256": "995f37ee8506d3d03b6cc9d4bbcda103e411b78f574464adc22c26bffbcff168"
+    }
+  ]
+}

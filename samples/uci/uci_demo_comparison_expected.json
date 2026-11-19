@@ -1,0 +1,34 @@
+{
+  "kind": "frozen_test_expectation_not_model_input",
+  "conditions": {
+    "first_from": "2026-10-15T00:00:00+08:00",
+    "first_before": "2026-10-17T00:00:00+08:00",
+    "second_from": "2026-10-17T00:00:00+08:00",
+    "second_before": "2026-10-19T00:00:00+08:00",
+    "refund_before": "2026-11-03T00:00:00+08:00"
+  },
+  "first": {
+    "order_count": 2,
+    "paid_amount_fen": 18000,
+    "refund_amount_fen": 3500,
+    "net_amount_fen": 14500
+  },
+  "second": {
+    "order_count": 1,
+    "paid_amount_fen": 20000,
+    "refund_amount_fen": 0,
+    "net_amount_fen": 20000
+  },
+  "delta": {
+    "order_count": -1,
+    "paid_amount_fen": 2000,
+    "refund_amount_fen": -3500,
+    "net_amount_fen": 5500
+  },
+  "channel_net_delta_fen": {
+    "合成网页渠道": -6500,
+    "unknown": -8000,
+    "合成应用渠道": 20000
+  },
+  "reason_status": "unknown"
+}

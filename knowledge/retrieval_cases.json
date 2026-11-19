@@ -1,0 +1,126 @@
+{
+  "schema_version": 1,
+  "frozen_before_real_embedding": true,
+  "scope": "同一适用版本3个完整条款候选的6题小样本；期望为人工读原文确定，不预言hybrid一定优于keyword。",
+  "source_files": [
+    {
+      "path": "2026-10-shoes.md",
+      "sha256": "a1484930b0caaef6faa5eefd3f477d3e12fd5d2461b9346b5f0de1aa2241e262"
+    },
+    {
+      "path": "2026-11-shoes.md",
+      "sha256": "995f37ee8506d3d03b6cc9d4bbcda103e411b78f574464adc22c26bffbcff168"
+    }
+  ],
+  "cases": [
+    {
+      "id": "K01",
+      "query": "退货申请时限是什么，未穿着且吊牌完好还需要什么条件？",
+      "scope": {
+        "store_id": "S001",
+        "category": "ordinary_shoes",
+        "paid_at": "2026-10-15T10:00:00+08:00"
+      },
+      "expected": {
+        "document_id": "S001-shoes-2026-10",
+        "version": "2026-10-v1",
+        "candidate_count": 3,
+        "relevant_sections": [
+          "return_eligibility"
+        ],
+        "desired_rank_max": 1,
+        "source_kind": "synthetic_demo"
+      }
+    },
+    {
+      "id": "K02",
+      "query": "鞋码不适合想退回去，寄回的快递费谁出？",
+      "scope": {
+        "store_id": "S001",
+        "category": "ordinary_shoes",
+        "paid_at": "2026-10-15T10:00:00+08:00"
+      },
+      "expected": {
+        "document_id": "S001-shoes-2026-10",
+        "version": "2026-10-v1",
+        "candidate_count": 3,
+        "relevant_sections": [
+          "shipping_cost"
+        ],
+        "desired_rank_max": 1,
+        "source_kind": "synthetic_demo"
+      }
+    },
+    {
+      "id": "K03",
+      "query": "已经定做过，即便从来没上脚也能退吗？",
+      "scope": {
+        "store_id": "S001",
+        "category": "ordinary_shoes",
+        "paid_at": "2026-10-15T10:00:00+08:00"
+      },
+      "expected": {
+        "document_id": "S001-shoes-2026-10",
+        "version": "2026-10-v1",
+        "candidate_count": 3,
+        "relevant_sections": [
+          "return_eligibility"
+        ],
+        "desired_rank_max": 1,
+        "source_kind": "synthetic_demo"
+      }
+    },
+    {
+      "id": "K04",
+      "query": "店家发错款，能否直接让店家出寄回费用？",
+      "scope": {
+        "store_id": "S001",
+        "category": "ordinary_shoes",
+        "paid_at": "2026-10-15T10:00:00+08:00"
+      },
+      "expected": {
+        "document_id": "S001-shoes-2026-10",
+        "version": "2026-10-v1",
+        "candidate_count": 3,
+        "relevant_sections": [
+          "shipping_cost"
+        ],
+        "desired_rank_max": 1,
+        "source_kind": "synthetic_demo"
+      }
+    },
+    {
+      "id": "K05",
+      "query": "退货申请时限和定制商品例外是什么？",
+      "scope": {
+        "store_id": "S001",
+        "category": "ordinary_shoes",
+        "paid_at": "2026-11-15T10:00:00+08:00"
+      },
+      "expected": {
+        "document_id": "S001-shoes-2026-11",
+        "version": "2026-11-v1",
+        "candidate_count": 3,
+        "relevant_sections": [
+          "return_eligibility"
+        ],
+        "desired_rank_max": 1,
+        "source_kind": "synthetic_demo"
+      }
+    },
+    {
+      "id": "K06",
+      "query": "普通鞋类退货运费谁承担？",
+      "scope": {
+        "store_id": "S002",
+        "category": "ordinary_shoes",
+        "paid_at": "2026-10-15T10:00:00+08:00"
+      },
+      "expected": {
+        "status": "insufficient_evidence",
+        "candidate_count": 0,
+        "embedding_requests": 0
+      }
+    }
+  ]
+}

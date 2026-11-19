@@ -1,0 +1,9 @@
+# 可选、显式的付费模型覆盖。不在 demo.py 默认启动命令中加载。
+# 将 DEEPSEEK_API_KEY 仅写入 local/demo.env，并自行核对费用和外发范围后启用。
+services:
+  app:
+    environment:
+      MODEL_ENABLED: '1'
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set a private key before explicitly enabling paid calls}
+      MODEL_NAME: ${MODEL_NAME:-deepseek-flash}
+      MAX_DAILY_TASKS: ${MAX_DAILY_TASKS:-10}

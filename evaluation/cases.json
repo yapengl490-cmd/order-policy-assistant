@@ -1,0 +1,22 @@
+{
+  "version": "development-baseline-20261116-v1",
+  "scope": "开发基准；金额与访问范围可程序判定，中文解释另核。不是最终保留测试集或生产准确率。",
+  "source": "README原事前样本及samples/dual_role_demo.json合成数据",
+  "cases": [
+    {"id":"buyer-cutoff-original", "role":"buyer", "identity":"B001", "tool":"check_order", "input":{"order_id":"O001","refund_before":"2026-11-03T00:00:00+08:00"}, "expected":{"status":"ok","paid_amount_fen":12500,"refund_amount_fen":4000,"net_amount_fen":8500}},
+    {"id":"buyer-cutoff-variation", "role":"buyer", "identity":"B001", "tool":"check_order", "input":{"order_id":"O001","refund_before":"2026-11-01T00:00:00+08:00"}, "expected":{"status":"ok","paid_amount_fen":12500,"refund_amount_fen":2500,"net_amount_fen":10000}},
+    {"id":"buyer-scope-denied", "role":"buyer", "identity":"B002", "tool":"check_order", "input":{"order_id":"O001","refund_before":"2026-11-03T00:00:00+08:00"}, "expected":{"status":"not_found"},"forbidden_fields":["paid_amount_fen","buyer_id"]},
+    {"id":"missing-order", "role":"buyer", "identity":"B001", "tool":"check_order", "input":{"order_id":"O404","refund_before":"2026-11-03T00:00:00+08:00"}, "expected":{"status":"not_found"}},
+    {"id":"merchant-two-equal-payments", "role":"merchant", "identity":"S001", "tool":"summary_orders", "input":{"paid_from":"2026-10-01T00:00:00+08:00","paid_before":"2026-11-01T00:00:00+08:00","refund_before":"2026-11-03T00:00:00+08:00"}, "expected":{"status":"ok","order_count":2,"paid_amount_fen":25000,"refund_amount_fen":4000,"net_amount_fen":21000}},
+    {"id":"merchant-no-refund", "role":"merchant", "identity":"S001", "tool":"check_order", "input":{"order_id":"O_DEMO_002","refund_before":"2026-11-03T00:00:00+08:00"}, "expected":{"status":"ok","refund_amount_fen":0,"net_amount_fen":12500}},
+    {"id":"merchant-other-shop", "role":"merchant", "identity":"S001", "tool":"check_order", "input":{"order_id":"O_DEMO_003","refund_before":"2026-11-03T00:00:00+08:00"}, "expected":{"status":"not_found"},"forbidden_fields":["paid_amount_fen","buyer_id"]},
+    {"id":"policy-expired", "role":"buyer", "identity":"B001", "tool":"search_policies", "input":{"query":"退款政策","as_of":"2030-01-01"}, "expected":{"status":"insufficient_evidence","policies":[]}}
+  ],
+  "separate_checks": {
+    "clarification": "使用fixed-clarification及followup真实记录：缺条件不查库，补充后再执行；不是把参考答案放进模型。",
+    "failure": "原real-clarification失败记录保留；tests覆盖格式/超时/数据库异常/取消。",
+    "delivery": "核对任务完成状态、网页、原始导出；飞书业务完成和回复送达分别核查。",
+    "cost_and_time": "单列每次HTTP请求数、token、耗时、余额变化，不用平均分抵消越权或错误金额。",
+    "holdout": "下一次方案对照前另留未用于修改提示的任务及数据；当前样例已用于开发，不冒称独立保留集。"
+  }
+}

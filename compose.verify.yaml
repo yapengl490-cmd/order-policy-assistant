@@ -1,0 +1,77 @@
+# 独立迁移验证；不使用正式数据库/凭据/运行目录。先生成专用.env，勿提交它。
+name: ${DEMO_PROJECT_NAME:-datus-public-demo}
+x-app-env: &app-env
+  DATUS_DEPLOYMENT: container
+  DB_HOST: db
+  DB_PORT: "5432"
+  DB_NAME: datus_core
+  DB_USER: datus_reader
+  DB_PASSWORD: ${VERIFY_READER_PASSWORD:?prepare isolated credentials}
+  MEMORY_DB_USER: datus_memory
+  MEMORY_DB_PASSWORD: ${VERIFY_MEMORY_PASSWORD:?prepare isolated credentials}
+  MODEL_ENABLED: "0"
+  MEMORY_ENABLED: "1"
+  MCP_ENABLED: "1"
+  MCP_URL: http://mcp:18081/mcp
+x-app: &app
+  image: ${DEMO_IMAGE:-datus-public-demo:local}
+  build: .
+  environment: *app-env
+  volumes:
+    - runtime:/app/local
+  read_only: true
+  tmpfs: /tmp
+  cap_drop: [ALL]
+  security_opt: [no-new-privileges:true]
+  mem_limit: 384m
+  cpus: 1.0
+  restart: "no"
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: datus_core
+      POSTGRES_PASSWORD: ${VERIFY_ADMIN_PASSWORD:?prepare isolated credentials}
+    volumes:
+      - database:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, pg_isready -U postgres -d datus_core]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    mem_limit: 512m
+    cpus: 1.0
+    restart: "no"
+  bootstrap:
+    <<: *app
+    environment:
+      <<: *app-env
+      POSTGRES_PASSWORD: ${VERIFY_ADMIN_PASSWORD:?prepare isolated credentials}
+      VERIFY_ACCESS_TOKEN: ${VERIFY_ACCESS_TOKEN:?prepare isolated credentials}
+    depends_on:
+      db: {condition: service_healthy}
+    command: [python, deploy_init.py]
+  mcp:
+    <<: *app
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+    command: [python, mcp_order_server.py]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18081/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  app:
+    <<: *app
+    depends_on:
+      bootstrap: {condition: service_completed_successfully}
+      mcp: {condition: service_healthy}
+    ports: ["127.0.0.1:${DEMO_PORT:-18180}:18080"]
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:18080/health',timeout=2)"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+volumes:
+  database:
+  runtime:

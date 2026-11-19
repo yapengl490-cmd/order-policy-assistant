@@ -1,0 +1,42 @@
+{
+  "definition": "人工按固定样本相加，未调用被测函数生成；支付区间分别10月/11月UTC，退款截止12月3日UTC不含",
+  "first": {
+    "order_count": 2,
+    "paid_amount_fen": 15000,
+    "refund_amount_fen": 2000,
+    "net_amount_fen": 13000
+  },
+  "second": {
+    "order_count": 2,
+    "paid_amount_fen": 18000,
+    "refund_amount_fen": 1000,
+    "net_amount_fen": 17000
+  },
+  "delta": {
+    "order_count": 0,
+    "paid_amount_fen": 3000,
+    "refund_amount_fen": -1000,
+    "net_amount_fen": 4000
+  },
+  "channels": {
+    "web": {
+      "presence": "continued",
+      "net_delta": 1000
+    },
+    "unknown": {
+      "presence": "disappeared",
+      "net_delta": -5000
+    },
+    "app": {
+      "presence": "new",
+      "net_delta": 8000
+    }
+  },
+  "excluded_refunds": [
+    "RC_BOUNDARY",
+    "RC_AFTER"
+  ],
+  "excluded_orders": [
+    "X"
+  ]
+}

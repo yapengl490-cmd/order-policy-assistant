@@ -1,0 +1,67 @@
+{
+  "executor": "assistant_frozen_expectations_before_integration",
+  "synthetic": true,
+  "now": "2026-11-18T08:00:00+08:00",
+  "r06": {
+    "claims": {
+      "is_unworn": true,
+      "tags_intact": true,
+      "reason": "size"
+    },
+    "O_SUPPORT_OK": {
+      "eligibility": "eligible_with_self_report",
+      "payer": "buyer"
+    },
+    "O001": {
+      "eligibility": "ineligible",
+      "failed_conditions": [
+        "return_window_expired"
+      ]
+    },
+    "O_SUPPORT_UNKNOWN": {
+      "status": "clarification",
+      "missing": [
+        "delivered_at"
+      ]
+    },
+    "O_SUPPORT_CUSTOM": {
+      "eligibility": "ineligible",
+      "failed_conditions": [
+        "custom_product_excluded"
+      ]
+    },
+    "unauthorized_buyer": "not_found",
+    "other_shop": "not_found",
+    "boundary": "as_of == delivered_at + policy.return_window_hours is ineligible"
+  },
+  "r05": {
+    "conditions": {
+      "first_from": "2026-11-10T00:00:00+08:00",
+      "first_before": "2026-11-13T00:00:00+08:00",
+      "second_from": "2026-11-13T00:00:00+08:00",
+      "second_before": "2026-11-16T00:00:00+08:00",
+      "refund_before": "2026-11-18T00:00:00+08:00"
+    },
+    "first": {
+      "order_count": 2,
+      "paid_amount_fen": 22000,
+      "refund_amount_fen": 1500,
+      "net_amount_fen": 20500
+    },
+    "second": {
+      "order_count": 2,
+      "paid_amount_fen": 23000,
+      "refund_amount_fen": 4500,
+      "net_amount_fen": 18500
+    },
+    "delta_refund_amount_fen": 3000,
+    "verified_size_first_fen": 1000,
+    "verified_size_second_fen": 3000,
+    "verified_size_delta_fen": 2000,
+    "buyer_reported_size_first_fen": 0,
+    "buyer_reported_size_second_fen": 500,
+    "missing_reason_first_fen": 0,
+    "missing_reason_second_fen": 1000,
+    "notice": "核实尺码记录对应退款金额增加2000分；不是尺码造成经营变化的因果证明。另有用户自述、其他原因及缺记录，不把总增额全部归因尺码。"
+  }
+}

@@ -1,0 +1,22 @@
+.venv/
+__pycache__/
+*.py[cod]
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# 本地合成样本库可由 init_db.py 恢复，不提交运行数据。
+/data/*.sqlite3*
+
+# 本机凭据、会话、任务证据和导入运行产物不提交。
+/local/
+/evidence/
+.pytest_cache/
+
+# Personal editor settings, raw imports and temporary validation artifacts
+.vscode/
+*.log
+*.sqlite*
+*.dump
+*.sql.gz

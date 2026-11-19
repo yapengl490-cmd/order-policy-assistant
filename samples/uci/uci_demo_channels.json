@@ -1,0 +1,18 @@
+{
+  "kind": "synthetic_channel_fixture",
+  "source": "独立合成渠道；不代表任何平台渠道或真实归因",
+  "version": "synthetic-channel-v1",
+  "order_channels": [
+    {
+      "order_id": "O_PUBLIC_SYNTH_001",
+      "channel": "合成网页渠道"
+    },
+    {
+      "order_id": "O_PUBLIC_SYNTH_003",
+      "channel": "合成应用渠道"
+    }
+  ],
+  "unmapped_order_ids": [
+    "O_PUBLIC_SYNTH_002"
+  ]
+}

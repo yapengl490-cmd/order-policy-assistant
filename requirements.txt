@@ -1,0 +1,14 @@
+SQLAlchemy==2.0.57
+psycopg[binary]==3.3.9
+python-dotenv==1.2.4
+# SQLAlchemy 的类型声明依赖，固定本轮实际版本。
+typing_extensions==4.16.0
+
+# 本轮本地接口与受约束模型调用。
+fastapi==0.143.0
+uvicorn==0.54.0
+pydantic==2.14.1
+httpx==0.28.1
+lark-oapi==1.7.5
+# 官方协议客户端/服务端；固定本次核实版本。
+mcp==2.3.0

@@ -1,0 +1,30 @@
+{
+  "version": "20261118-holdout-v1",
+  "frozen_at": "2026-11-18T07:36:58.446013+00:00",
+  "suite_sha256": "608f773be2f976dd49ca344a08396f530d26b31204d3ea2127c037e25dbfa7f9",
+  "case_count": 6,
+  "question_content_not_sent_to_implementation_agent": true,
+  "held_out_boundary": "6个固定合成演示题、每题计划2次；新题面/条件组合保留，同底层样本已用于开发，不声称样本数据未见或生产准确率。",
+  "source_fingerprints": [
+    {
+      "path": "sql/002_demo_data.sql",
+      "sha256": "cb86621809599ce10446e2da7beaad384635e4cd19f0e2b533f16ebe30c9cac2"
+    },
+    {
+      "path": "samples/dual_role_demo.json",
+      "sha256": "57e23f559457a5685dc2eb552e9d893b53f372df19e1637a10a4b6086f2dde1d"
+    },
+    {
+      "path": "sql/004_shop_scope.sql",
+      "sha256": "cdeceb1095132c7de6d3d4bafe4b8b1272ddbd0db497924aff5244773a8740a9"
+    },
+    {
+      "path": "sql/005_demo_shop_mapping.sql",
+      "sha256": "ae52b08fc9edf2437630b76f9cdd1759d5728625566765da9690befc06e02090"
+    },
+    {
+      "path": "policies.json",
+      "sha256": "832912d1f9977cde6fc0b3c3e72e02a041a94966fdedba60d76e652a61cfa713"
+    }
+  ]
+}

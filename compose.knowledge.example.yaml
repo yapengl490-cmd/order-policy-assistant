@@ -1,0 +1,9 @@
+# 可选：只在显式传入此覆盖文件时挂载本机嵌入配置。
+# 先复制 knowledge.env.example 为 local/knowledge.env 并在本机填写；不上传。
+services:
+  bootstrap:
+    volumes:
+      - ./local/knowledge.env:/app/local/knowledge.env:ro
+  app:
+    volumes:
+      - ./local/knowledge.env:/app/local/knowledge.env:ro

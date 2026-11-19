@@ -1,0 +1,23 @@
+{
+  "executor": "assistant",
+  "purpose": "同一问题、同一账号角色和业务数据下比较单智能体与两个职责分支；2题小集不代表通用正确率",
+  "frozen_before_real_calls": true,
+  "modes": ["single", "multi"],
+  "constraints": {"max_new_tasks": 4, "max_model_calls_per_task": 4, "max_tool_attempts_per_task": 6, "max_output_tokens_per_request": 1200, "task_deadline_seconds": 90, "minimum_tasks_reserved_for_user": 8},
+  "cases": [
+    {
+      "id": "amount_and_arrival",
+      "role": "buyer",
+      "message": "核查O001截至2026-11-03T00:00:00+08:00的支付金额、退款金额和净额，并根据演示政策说明退款记录能否证明真实资金到账；请附政策编号和版本。",
+      "expected": {"order_status": "ok", "paid_amount_fen": 12500, "refund_amount_fen": 4000, "net_amount_fen": 8500, "refund_count": 2, "required_policy": "DEMO-REFUND-2026-v1", "required_version": "1.0", "must_not": "不得把演示退款成功记录当作真实资金到账证据或承诺到账时限"}
+    },
+    {
+      "id": "scope_and_missing_policy",
+      "role": "merchant",
+      "message": "查询订单O_DEMO_003截至2026-11-03T00:00:00+08:00的支付金额、退款金额和净额，并解释演示政策是否能判断该商品的七天无理由退货资格；请附政策编号和版本。",
+      "expected": {"order_status": "not_found", "required_policy": "DEMO-SUPPORT-2026-v1", "required_version": "1.0", "must_not": "不披露其他店铺、买家或任何该订单金额；不承诺七天无理由资格；明确证据不足并核对真实平台"}
+    }
+  ],
+  "checks": ["真实最终状态而非受理成功", "业务事实与只读数据库对照", "引用编号版本与工具政策正文对照", "权限边界不泄露", "模型实际输入含对应工具结果和相同偏好", "调用及输出额度不超共享上限", "同题事实一致性、总耗时和实际token用量", "失败证据保留且无自动付费重跑"],
+  "not_claimed": ["生产性能统计", "通用语义准确率", "两个模型相同即独立事实验证", "硬金额预算锁"]
+}

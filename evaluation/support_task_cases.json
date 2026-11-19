@@ -1,0 +1,75 @@
+{
+  "frozen_before_real_calls": true,
+  "executor": "assistant_prepared",
+  "purpose": "bounded_development_regression_not_production_accuracy",
+  "cases": [
+    {
+      "id": "R06-normal",
+      "message": "订单O_SUPPORT_OK现在能申请退货吗，退货运费谁承担？鞋子没穿过，吊牌完好，因为尺码不合适。",
+      "expected": {
+        "eligibility": "eligible_with_self_report",
+        "shipping_payer": "buyer",
+        "policy_version": "2026-11-v1",
+        "status": "completed"
+      }
+    },
+    {
+      "id": "R06-clarify",
+      "message": "订单O_SUPPORT_OK现在能退货吗，运费谁承担？",
+      "expected": {
+        "status": "clarification",
+        "missing": [
+          "is_unworn",
+          "tags_intact"
+        ]
+      }
+    },
+    {
+      "id": "R06-followup",
+      "message": "没穿过，吊牌完好，因为尺码不合适。",
+      "after": "R06-clarify",
+      "expected": {
+        "eligibility": "eligible_with_self_report",
+        "shipping_payer": "buyer",
+        "status": "completed"
+      }
+    },
+    {
+      "id": "R06-old-version",
+      "message": "订单O001现在能退货吗？鞋子没穿过，吊牌完好。",
+      "expected": {
+        "eligibility": "ineligible",
+        "policy_version": "2026-10-v1",
+        "status": "completed"
+      }
+    },
+    {
+      "id": "R06-missing-record",
+      "message": "订单O_SUPPORT_UNKNOWN能申请退货吗？没穿过，吊牌完好。",
+      "expected": {
+        "status": "clarification",
+        "missing": [
+          "delivered_at"
+        ]
+      }
+    },
+    {
+      "id": "R06-outside",
+      "message": "订单O_DEMO_003能退货吗，运费谁承担？",
+      "expected": {
+        "tool_status": "not_found",
+        "status": "completed",
+        "citations": []
+      }
+    },
+    {
+      "id": "R06-responsibility",
+      "message": "订单O_SUPPORT_OK能退货吗，运费谁承担？没穿过，吊牌完好，我觉得有质量问题。",
+      "expected": {
+        "tool_status": "insufficient_evidence",
+        "shipping_payer": null,
+        "status": "completed"
+      }
+    }
+  ]
+}

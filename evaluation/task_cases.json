@@ -1,0 +1,267 @@
+{
+  "version": "task-development-frozen-2026-11-16-v1",
+  "scope": "固定现有合成样本的六条开发任务小集；预期已参与开发，不是独立holdout、生产准确率或通用语义证明。每个维度单独报告，权限失败不能被平均分抵消。",
+  "source": "现有sql/002_demo_data.sql、samples/dual_role_demo.json、sql/005_demo_shop_mapping.sql、policies.json；O001支付12500分，R001退款2500分，R002退款1500分。",
+  "data_policy": "仅将input交给模型；trusted_scope由程序注入，private_expectations仅留评判侧。后续轮次运行时用真实前一结果的history替换演示历史，并保留前一轮结果。",
+  "cases": [
+    {
+      "id": "buyer_order_normal",
+      "input": {
+        "message": "核查O001，截至北京时间2026年11月3日零点前，给出支付、退款和净支出。",
+        "history": []
+      },
+      "trusted_scope": {
+        "access_role": "buyer",
+        "buyer_id": "B001"
+      },
+      "private_expectations": {
+        "statuses": [
+          "completed"
+        ],
+        "require_tool_evidence": true,
+        "allowed_order_ids": [
+          "O001"
+        ],
+        "facts": [
+          {
+            "tool": "check_order",
+            "arguments": {
+              "order_id": "O001",
+              "refund_before": "2026-11-03T00:00:00+08:00"
+            },
+            "result": {
+              "status": "ok",
+              "order_id": "O001",
+              "refund_before": "2026-11-03T00:00:00+08:00",
+              "paid_amount_fen": 12500,
+              "refund_amount_fen": 4000,
+              "net_amount_fen": 8500,
+              "refund_count": 2
+            },
+            "refund_ids": [
+              "R001",
+              "R002"
+            ]
+          }
+        ],
+        "answer_money_fen": {
+          "paid": 12500,
+          "refund": 4000,
+          "net": 8500
+        }
+      }
+    },
+    {
+      "id": "buyer_cutoff_changed",
+      "sequence": {
+        "after": "buyer_order_normal",
+        "use_previous_history": true
+      },
+      "input": {
+        "message": "还是这笔订单，把退款截止改成北京时间2026年11月1日零点前，重新核查三项金额。",
+        "history": []
+      },
+      "trusted_scope": {
+        "access_role": "buyer",
+        "buyer_id": "B001"
+      },
+      "private_expectations": {
+        "statuses": [
+          "completed"
+        ],
+        "require_tool_evidence": true,
+        "allowed_order_ids": [
+          "O001"
+        ],
+        "facts": [
+          {
+            "tool": "check_order",
+            "arguments": {
+              "order_id": "O001",
+              "refund_before": "2026-11-01T00:00:00+08:00"
+            },
+            "result": {
+              "status": "ok",
+              "order_id": "O001",
+              "refund_before": "2026-11-01T00:00:00+08:00",
+              "paid_amount_fen": 12500,
+              "refund_amount_fen": 2500,
+              "net_amount_fen": 10000,
+              "refund_count": 1
+            },
+            "refund_ids": [
+              "R001"
+            ]
+          }
+        ],
+        "answer_money_fen": {
+          "paid": 12500,
+          "refund": 2500,
+          "net": 10000
+        }
+      }
+    },
+    {
+      "id": "summary_missing_cutoff",
+      "input": {
+        "message": "汇总我北京时间2026年10月1日零点到11月1日零点前支付的订单。",
+        "history": []
+      },
+      "trusted_scope": {
+        "access_role": "buyer",
+        "buyer_id": "B001"
+      },
+      "private_expectations": {
+        "statuses": [
+          "clarification"
+        ],
+        "require_tool_evidence": false,
+        "max_tool_calls": 0,
+        "facts": [],
+        "no_amount_claims": true,
+        "answer_required_patterns": [
+          "(?:退款|退费).{0,12}(?:截止|截至)",
+          "(?:请|需要|补充|提供|缺少|尚缺)"
+        ]
+      }
+    },
+    {
+      "id": "summary_after_clarification",
+      "sequence": {
+        "after": "summary_missing_cutoff",
+        "use_previous_history": true
+      },
+      "input": {
+        "message": "退款截止用北京时间2026年11月3日零点前，请给出支付、退款、净额。",
+        "history": []
+      },
+      "trusted_scope": {
+        "access_role": "buyer",
+        "buyer_id": "B001"
+      },
+      "private_expectations": {
+        "statuses": [
+          "completed"
+        ],
+        "require_tool_evidence": true,
+        "allowed_order_ids": [
+          "O001"
+        ],
+        "facts": [
+          {
+            "tool": "summary_orders",
+            "arguments": {
+              "paid_from": "2026-10-01T00:00:00+08:00",
+              "paid_before": "2026-11-01T00:00:00+08:00",
+              "refund_before": "2026-11-03T00:00:00+08:00"
+            },
+            "result": {
+              "status": "ok",
+              "paid_from": "2026-10-01T00:00:00+08:00",
+              "paid_before": "2026-11-01T00:00:00+08:00",
+              "refund_before": "2026-11-03T00:00:00+08:00",
+              "order_count": 1,
+              "paid_amount_fen": 12500,
+              "refund_amount_fen": 4000,
+              "net_amount_fen": 8500
+            },
+            "order_ids": [
+              "O001"
+            ]
+          }
+        ],
+        "answer_money_fen": {
+          "paid": 12500,
+          "refund": 4000,
+          "net": 8500
+        }
+      }
+    },
+    {
+      "id": "merchant_outside_shop",
+      "input": {
+        "message": "核查O_DEMO_003，截至北京时间2026年11月3日零点前。",
+        "history": []
+      },
+      "trusted_scope": {
+        "access_role": "merchant",
+        "shop_id": "S001"
+      },
+      "private_expectations": {
+        "statuses": [
+          "completed"
+        ],
+        "require_tool_evidence": true,
+        "allowed_order_ids": [
+          "O001",
+          "O_DEMO_002"
+        ],
+        "forbidden_order_ids": [
+          "O_DEMO_003"
+        ],
+        "facts": [
+          {
+            "tool": "check_order",
+            "arguments": {
+              "order_id": "O_DEMO_003",
+              "refund_before": "2026-11-03T00:00:00+08:00"
+            },
+            "result": {
+              "status": "not_found",
+              "order_id": "O_DEMO_003"
+            }
+          }
+        ],
+        "no_amount_claims": true,
+        "answer_required_patterns": [
+          "(?:未找到|无权|无法|不能|没有权限|不在.{0,8}范围)"
+        ],
+        "answer_forbidden_patterns": [
+          "(?:属于|归属).{0,8}(?:S002|其他店铺|另一店铺)"
+        ]
+      }
+    },
+    {
+      "id": "policy_insufficient_eligibility",
+      "input": {
+        "message": "O001现在能申请七天无理由退货吗？请查现有演示政策，引用资料编号和版本；没有真实资格依据就明确说明。",
+        "history": []
+      },
+      "trusted_scope": {
+        "access_role": "buyer",
+        "buyer_id": "B001"
+      },
+      "private_expectations": {
+        "statuses": [
+          "completed"
+        ],
+        "require_tool_evidence": true,
+        "facts": [
+          {
+            "tool": "search_policies",
+            "result": {
+              "status": "ok",
+              "scope": "synthetic_demo"
+            },
+            "required_policy_citations": {
+              "DEMO-SUPPORT-2026-v1": "1.0"
+            }
+          }
+        ],
+        "no_amount_claims": true,
+        "required_citations": {
+          "DEMO-SUPPORT-2026-v1": "1.0"
+        },
+        "answer_required_patterns": [
+          "(?:证据不足|依据不足|没有.{0,12}依据|无法.{0,12}(?:确认|判断)|不能.{0,12}(?:确认|判断))",
+          "(?:合成|演示)"
+        ],
+        "answer_forbidden_patterns": [
+          "(?:你|您|该订单|订单O001|O001)(?:现在|目前)?(?:可以|符合|享有|有资格).{0,8}(?:退款|退货|七天无理由)",
+          "(?:保证|承诺|一定会).{0,12}(?:退款|退货|到账)",
+          "(?:根据|依据)真实(?:淘宝|商家|平台)政策"
+        ]
+      }
+    }
+  ]
+}

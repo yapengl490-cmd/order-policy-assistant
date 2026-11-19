@@ -1,0 +1,37 @@
+{
+  "metadata": {
+    "source": "synthetic:datus-core-import-demo",
+    "version": "2026-11-16-v1",
+    "currency": "CNY",
+    "normalized": true,
+    "data_kind": "normalized_sample"
+  },
+  "buyers": [
+    {"buyer_id": "B_IMPORT_DEMO", "display_name": "合成导入演示买家"}
+  ],
+  "orders": [
+    {
+      "order_id": "O_IMPORT_DEMO",
+      "buyer_id": "B_IMPORT_DEMO",
+      "paid_at": "2026-11-01T10:00:00+08:00",
+      "paid_amount_fen": 10000,
+      "status": "paid"
+    }
+  ],
+  "refunds": [
+    {
+      "refund_id": "R_IMPORT_DEMO_1",
+      "order_id": "O_IMPORT_DEMO",
+      "refunded_at": "2026-11-02T09:00:00+08:00",
+      "refund_amount_fen": 2000,
+      "status": "succeeded"
+    },
+    {
+      "refund_id": "R_IMPORT_DEMO_2",
+      "order_id": "O_IMPORT_DEMO",
+      "refunded_at": "2026-11-03T09:00:00+08:00",
+      "refund_amount_fen": 1000,
+      "status": "succeeded"
+    }
+  ]
+}

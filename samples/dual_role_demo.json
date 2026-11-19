@@ -1,0 +1,14 @@
+{
+  "metadata": {"source": "助手合成的买家商家隔离演示，非真实店铺数据", "version": "dual-role-20261116-v1", "currency": "CNY", "normalized": true, "data_kind": "normalized_sample"},
+  "buyers": [
+    {"buyer_id": "B_DEMO_002", "display_name": "同店另一演示买家"},
+    {"buyer_id": "B_DEMO_003", "display_name": "其他店铺演示买家"}
+  ],
+  "orders": [
+    {"order_id": "O_DEMO_002", "buyer_id": "B_DEMO_002", "paid_at": "2026-10-18T10:00:00+08:00", "paid_amount_fen": 12500, "status": "paid"},
+    {"order_id": "O_DEMO_003", "buyer_id": "B_DEMO_003", "paid_at": "2026-10-18T11:00:00+08:00", "paid_amount_fen": 9000, "status": "paid"}
+  ],
+  "refunds": [
+    {"refund_id": "R_DEMO_003", "order_id": "O_DEMO_003", "refunded_at": "2026-10-20T09:00:00+08:00", "refund_amount_fen": 1000, "status": "succeeded"}
+  ]
+}

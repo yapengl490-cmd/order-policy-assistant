@@ -1,0 +1,16 @@
+# 构建上下文允许清单：不读取local、虚拟环境、环境文件、密钥或旧运行证据。
+**
+!*.py
+!requirements.lock.txt
+!policies.json
+!web/
+!web/**
+!sql/
+!sql/**
+!samples/
+!samples/**
+!Dockerfile
+!knowledge/
+!knowledge/**
+!skills/
+!skills/**

@@ -1,0 +1,87 @@
+{
+  "metadata": {
+    "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录",
+    "version": "support-facts-20261118-v1",
+    "data_kind": "synthetic_demo"
+  },
+  "order_support_facts": [
+    {
+      "order_id": "O001",
+      "product_category": "ordinary_shoes",
+      "delivered_at": "2026-10-20T10:00:00+08:00",
+      "is_custom": false,
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录；O001",
+      "recorded_at": "2026-11-17T20:00:00+08:00"
+    },
+    {
+      "order_id": "O_SUPPORT_OK",
+      "product_category": "ordinary_shoes",
+      "delivered_at": "2026-11-17T09:00:00+08:00",
+      "is_custom": false,
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录；O_SUPPORT_OK",
+      "recorded_at": "2026-11-17T20:00:00+08:00"
+    },
+    {
+      "order_id": "O_SUPPORT_UNKNOWN",
+      "product_category": "ordinary_shoes",
+      "delivered_at": null,
+      "is_custom": false,
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录；O_SUPPORT_UNKNOWN",
+      "recorded_at": "2026-11-17T20:00:00+08:00"
+    },
+    {
+      "order_id": "O_SUPPORT_CUSTOM",
+      "product_category": "ordinary_shoes",
+      "delivered_at": "2026-11-16T09:00:00+08:00",
+      "is_custom": true,
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录；O_SUPPORT_CUSTOM",
+      "recorded_at": "2026-11-17T20:00:00+08:00"
+    },
+    {
+      "order_id": "O_SUPPORT_NOREASON",
+      "product_category": "ordinary_shoes",
+      "delivered_at": "2026-11-16T10:00:00+08:00",
+      "is_custom": false,
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录；O_SUPPORT_NOREASON",
+      "recorded_at": "2026-11-17T20:00:00+08:00"
+    }
+  ],
+  "refund_reason_records": [
+    {
+      "evidence_id": "EV_R_SUPPORT_A",
+      "refund_id": "R_SUPPORT_A",
+      "reason_code": "size",
+      "verification_status": "verified",
+      "recorded_at": "2026-11-17T20:00:00+08:00",
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录",
+      "note": "合成核对记录；verified为演示记录声明，不代表真实售后调查完成。"
+    },
+    {
+      "evidence_id": "EV_R_SUPPORT_B",
+      "refund_id": "R_SUPPORT_B",
+      "reason_code": "other",
+      "verification_status": "buyer_reported",
+      "recorded_at": "2026-11-17T20:00:00+08:00",
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录",
+      "note": "合成核对记录；verified为演示记录声明，不代表真实售后调查完成。"
+    },
+    {
+      "evidence_id": "EV_R_SUPPORT_C",
+      "refund_id": "R_SUPPORT_C",
+      "reason_code": "size",
+      "verification_status": "verified",
+      "recorded_at": "2026-11-17T20:00:00+08:00",
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录",
+      "note": "合成核对记录；verified为演示记录声明，不代表真实售后调查完成。"
+    },
+    {
+      "evidence_id": "EV_R_SUPPORT_C2",
+      "refund_id": "R_SUPPORT_C2",
+      "reason_code": "size",
+      "verification_status": "buyer_reported",
+      "recorded_at": "2026-11-17T20:00:00+08:00",
+      "source": "助手编写的独立鞋类售后演示，所有收货/定制/原因核实状态均为合成，不代表真实平台记录",
+      "note": "合成核对记录；verified为演示记录声明，不代表真实售后调查完成。"
+    }
+  ]
+}
