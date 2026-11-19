@@ -660,7 +660,7 @@ def run_agent(settings, engine, message: str, buyer_id: str, history: list,
                         except (ValueError, TypeError):
                             body_final, errors = {}, ["invalid_final_structure"]
                         event["support_validation"] = {"passed": not errors, "errors": errors,
-                            "scope": "decision_fields_and_citation_membership_not_full_semantics"}
+                            "scope": "decision_fields_citations_explicit_dates_not_full_semantics"}
                         status = "clarification" if support_result.get("status") == "clarification" else "completed"
                         if errors:
                             answer = "模型解释未通过核对，以下为程序依据事实生成的摘要：\n" + factual_support_answer(support_result, compact=True)

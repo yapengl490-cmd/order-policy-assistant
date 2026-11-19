@@ -1,8 +1,9 @@
 """售后工具连接：订单授权、政策检索、确定性判断及可追溯引用。"""
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from copy import deepcopy
 import re
+from zoneinfo import ZoneInfo
 
 
 def review_after_sales(engine, order_id, *, buyer_id=None, shop_id=None, state, should_cancel=lambda:False):
@@ -96,6 +97,80 @@ def _asserts(pattern, answer):
     return False
 
 
+def _support_date_errors(answer, result):
+    """有限核对正文中的明确时间陈述；时区换写必须仍是同一时刻。"""
+    from condition_state import BUSINESS_TIMEZONE, _ISO, _CHINESE, _datetime_text
+
+    expected = {
+        'return_deadline': result.get('return_window', {}).get('before'),
+        'delivery': result.get('trusted_facts', {}).get('delivered_at'),
+        'assessment': result.get('as_of'),
+    }
+    labels = (
+        ('return_deadline', re.compile(r'截止|截至|before', re.I)),
+        ('delivery', re.compile(r'收货|签收|delivered_at|starts_at', re.I)),
+        ('assessment', re.compile(r'判断|核查时|评估时|as_of', re.I)),
+    )
+    errors = []
+    matches = sorted([*_ISO.finditer(answer), *_CHINESE.finditer(answer)], key=lambda m: m.start())
+    previous_end = 0
+    for match in matches:
+        # 只在当前短句绑定字段，避免把上一时间的含义套到下一时间。
+        prefix = re.split(r'[，,；;。！？!?\n]', answer[previous_end:match.start()])[-1][-50:]
+        suffix = answer[match.end():match.end()+25]
+        previous_end = match.end()
+        candidates = [(m.end(), key) for key, pattern in labels for m in pattern.finditer(prefix)]
+        key = max(candidates)[1] if candidates else None
+        if key is None and re.match(r'\s*(?:收货|签收)', suffix):
+            key = 'delivery'
+        if key is None and re.match(r'\s*(?:时点|时刻)', suffix):
+            key = 'assessment'
+        if key is None or re.search(r'如果|假如|假设|不能确认|无法确认|是否|待核|请(?:先)?(?:核对|确认)', prefix):
+            continue
+        fact = expected[key]
+        if not fact:
+            errors.append(key + '_date_unavailable')
+            continue
+        try:
+            trusted = datetime.fromisoformat(fact.replace('Z', '+00:00'))
+            if trusted.tzinfo is None:
+                raise ValueError('fact_without_timezone')
+            raw = match[0]
+            date_only = bool(re.fullmatch(r'\d{4}-\d{2}-\d{2}|\d{4}年\d{1,2}月\d{1,2}[日号]', raw))
+            # 沿用输入条件的北京时间默认值；临近的明确UTC标注另行处理。
+            zone = ZoneInfo(BUSINESS_TIMEZONE)
+            zone_pattern = r'(?:UTC)([+-]\d{1,2}(?::?\d{2})?)?|北京时间|中国标准时间'
+            suffix_zone = re.match(r'\s*[（(]?\s*(' + zone_pattern + r')', suffix, re.I)
+            zone_text = suffix_zone[1] if suffix_zone else prefix[-15:]
+            explicit_zone = re.search(zone_pattern, zone_text, re.I)
+            if explicit_zone and explicit_zone[0].upper().startswith('UTC'):
+                offset = explicit_zone[1] or '+00:00'
+                sign = -1 if offset.startswith('-') else 1
+                parts = offset[1:].replace(':', '')
+                hours, minutes = (int(parts[:-2]), int(parts[-2:])) if len(parts) > 2 else (int(parts), 0)
+                if hours > 23 or minutes > 59:
+                    raise ValueError('invalid_timezone')
+                zone = timezone(sign * timedelta(hours=hours, minutes=minutes))
+            if date_only:
+                parts = re.findall(r'\d+', raw)
+                stated_date = datetime(*map(int, parts)).date()
+                if stated_date != trusted.astimezone(zone).date():
+                    errors.append(key + '_date_mismatch')
+                elif key == 'return_deadline':
+                    # 截止精确到时刻，不能把“某日”暗补为零点或当天结束。
+                    errors.append('return_deadline_time_missing')
+                continue
+            normalized, _ = _datetime_text(raw)
+            stated = datetime.fromisoformat(normalized)
+            if explicit_zone and not re.search(r'Z$|[+-]\d{2}:\d{2}$', raw):
+                stated = stated.replace(tzinfo=zone)
+            if stated != trusted:
+                errors.append(key + '_date_mismatch')
+        except (TypeError, ValueError):
+            errors.append(key + '_date_invalid')
+    return errors
+
+
 def validate_support_answer(body, result):
     """检查结构化决定、引用归属及显然越权承诺；不宣称完整语义正确性。"""
     errors=[]
@@ -115,6 +190,7 @@ def validate_support_answer(body, result):
     elif _asserts(r'已经?(?:批准|退款|受理)|保证(?:退货|退款)|审核已通过|已为你(?:申请|退款)|本次(?:直接|可)?批准退货|不需要再核验|无需核验|所有费用商家负责',answer):
         errors.append('unsupported_execution_claim')
     if isinstance(answer,str):
+        errors.extend(_support_date_errors(answer, result))
         # 只拦明确可识别的反向结论，否定/待核话语不作为肯定承担。
         payer=result.get('shipping',{}).get('payer')
         if payer=='buyer' and _asserts(r'(?:运费|邮费).{0,4}(?:由)?商家(?:承担|支付|出)',answer):

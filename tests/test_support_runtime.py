@@ -74,6 +74,91 @@ class SupportRuntimeTests(unittest.TestCase):
         return {'status':'clarification' if fact['status']=='clarification' else 'completed',
                 'answer':answer,'decision':expected_decision(fact),'citation_ids':list(fact['citation_index'])}
 
+    def dated_fact(self):
+        fact = self.fact()
+        fact.update(as_of='2026-11-18T13:00:00+00:00',
+                    trusted_facts={'delivered_at':'2026-11-16T02:00:00+00:00'},
+                    return_window={'starts_at':'2026-11-16T02:00:00+00:00',
+                                   'before':'2026-11-30T02:00:00+00:00'})
+        return fact
+
+    def test_wrong_timezone_relabel_is_rejected_and_raw_output_kept(self):
+        fact = self.dated_fact()
+        answer = '按本次记录，退货申请即截止2026-11-30T02:00:00+08:00之前，不含该时刻。'
+        got, _ = self.execute(fact, self.body(fact, answer))
+        self.assertIn('return_deadline_date_mismatch', got['support_validation']['errors'])
+        self.assertIn('程序依据事实', got['answer'])
+        self.assertNotIn('2026-11-30T02:00:00+08:00', got['answer'])
+        self.assertIn(answer, json.dumps(got['trace'], ensure_ascii=False))
+        self.assertEqual(got['facts'][0]['result']['return_window']['before'], fact['return_window']['before'])
+
+    def test_same_deadline_in_utc_local_iso_and_chinese_is_allowed(self):
+        fact = self.dated_fact()
+        for stamp in ('2026-11-30T02:00:00+00:00', '2026-11-30T02:00:00Z',
+                      '2026-11-30T10:00:00+08:00', '2026-11-30 10:00',
+                      '2026年11月30日10点', '2026年11月30日10时00分',
+                      '2026-11-30 02:00（UTC）', '2026年11月30日02:00 UTC',
+                      '2026-11-30 10:00（UTC+08:00）'):
+            with self.subTest(stamp=stamp):
+                answer = '退货截止为' + stamp + '，不含该时刻。'
+                self.assertEqual(validate_support_answer(self.body(fact, answer), fact), [])
+
+    def test_date_guard_uses_actual_tool_values_instead_of_fixed_fixture(self):
+        fact = self.dated_fact()
+        fact['return_window']['before'] = '2027-02-08T19:15:00+00:00'
+        good = '退货截止2027-02-09T03:15:00+08:00。'
+        bad = '退货截止2027-02-08T19:15:00+08:00。'
+        self.assertEqual(validate_support_answer(self.body(fact, good), fact), [])
+        self.assertIn('return_deadline_date_mismatch', validate_support_answer(self.body(fact, bad), fact))
+
+    def test_delivery_and_assessment_dates_are_checked_against_own_fields(self):
+        fact = self.dated_fact()
+        for answer, error in (
+            ('收货时间2026-11-16T02:00:00+08:00。', 'delivery_date_mismatch'),
+            ('判断时间2026-11-18T13:00:00+08:00。', 'assessment_date_mismatch'),
+            ('在2026-11-18T13:00:00+08:00时点，核对本单。', 'assessment_date_mismatch'),
+            ('收货时间2026年11月17日10点。', 'delivery_date_mismatch'),
+        ):
+            with self.subTest(answer=answer):
+                self.assertIn(error, validate_support_answer(self.body(fact, answer), fact))
+        answer = ('收货时间2026年11月16日10点，判断时间2026-11-18T21:00:00+08:00；'
+                  '收货后336小时，即截止2026-11-30T10:00:00+08:00之前。')
+        self.assertEqual(validate_support_answer(self.body(fact, answer), fact), [])
+
+    def test_delivery_date_without_clock_only_compares_calendar_date(self):
+        fact = self.dated_fact()
+        for answer in ('收货日期2026-11-16。', '收货日期2026年11月16日。'):
+            self.assertEqual(validate_support_answer(self.body(fact, answer), fact), [])
+        wrong = '收货日期2026年11月17日。'
+        self.assertIn('delivery_date_mismatch', validate_support_answer(self.body(fact, wrong), fact))
+
+    def test_bare_deadline_does_not_silently_expand_to_whole_day(self):
+        fact = self.dated_fact()
+        for answer in ('退货截止2026-11-30。', '退货截止日期2026年11月30日。'):
+            self.assertIn('return_deadline_time_missing', validate_support_answer(self.body(fact, answer), fact))
+        wrong = '退货截止2026-12-01。'
+        self.assertIn('return_deadline_date_mismatch', validate_support_answer(self.body(fact, wrong), fact))
+
+    def test_missing_delivery_or_window_does_not_allow_fabricated_exact_date(self):
+        fact = self.dated_fact()
+        fact['trusted_facts'] = {}
+        fact['return_window'] = {}
+        for answer, error in (('收货时间2026-11-16T10:00:00+08:00。', 'delivery_date_unavailable'),
+                              ('退货截止2026-11-30T10:00:00+08:00。', 'return_deadline_date_unavailable')):
+            self.assertIn(error, validate_support_answer(self.body(fact, answer), fact))
+
+    def test_invalid_explicit_date_is_not_accepted(self):
+        fact = self.dated_fact()
+        for answer in ('退货截止2026-11-31T10:00:00+08:00。', '退货截止2026年11月30日25点。'):
+            self.assertIn('return_deadline_date_invalid', validate_support_answer(self.body(fact, answer), fact))
+
+    def test_unrelated_dates_and_explicit_hypotheses_are_not_actual_time_claims(self):
+        fact = self.dated_fact()
+        for answer in ('政策版本生效2026-11-01，按支付时选择。',
+                       '如果收货时间2026-11-20T10:00:00+08:00，仍须核对真实记录。',
+                       '请核对收货时间是否2026-11-20T10:00:00+08:00。'):
+            self.assertEqual(validate_support_answer(self.body(fact, answer), fact), [])
+
     def test_old_policy_false_positive_body_falls_back_and_keeps_raw(self):
         fact=self.fact();fact.update(eligibility='ineligible',policy_version='2026-10-v1')
         answer='按11月新规享受14天退货期，现在仍能退货。'
