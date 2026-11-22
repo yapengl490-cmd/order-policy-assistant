@@ -77,6 +77,11 @@ def check_catalog_policy(engine, *, store_id, category, is_custom, policy_at):
     except SQLAlchemyError:
         return unknown('policy_storage_unavailable', '政策读取暂不可用，不能据此承诺可退。')
     if not isinstance(bundle, dict) or bundle.get('status') != 'ok':
+        if isinstance(bundle, dict) and bundle.get('status') in {'withdrawn', 'superseded_without_valid_replacement'}:
+            # 不填可用document/rules：商品事实可保留，撤回条款不能支持“要能退”的推荐。
+            result.update(policy_status=bundle['status'], policy_lifecycle=deepcopy(bundle.get('lifecycle', {})))
+            return unknown(bundle.get('reason', 'applicable_policy_withdrawn'),
+                           '适用退货政策已撤回且当前没有可用更正版，不能确认满足可退要求；商品自身信息不因此删除。')
         reason = bundle.get('reason') if isinstance(bundle, dict) else None
         # 仅传递已知错误类别；不将外部文本当政策或暴露其他范围内容。
         reason = reason if isinstance(reason, str) and reason in {'no_applicable_policy', 'overlapping_policy_versions', 'stored_content_mismatch'} else 'invalid_policy'

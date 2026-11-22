@@ -42,7 +42,7 @@ def prepare():
             if any(flags) or membership:raise ValueError('已有验证角色权限超出范围，未继续初始化')
         con.execute('CREATE TABLE IF NOT EXISTS public.verify_migrations (name TEXT PRIMARY KEY, sha256 TEXT NOT NULL)')
         import hashlib
-        migrations=['001_initial_schema.sql','002_demo_data.sql','003_import_batches.sql','004_shop_scope.sql','006_preferences.sql','007_import_row_sources.sql','008_order_channels.sql','009_policy_knowledge.sql','010_support_facts.sql']
+        migrations=['001_initial_schema.sql','002_demo_data.sql','003_import_batches.sql','004_shop_scope.sql','006_preferences.sql','007_import_row_sources.sql','008_order_channels.sql','009_policy_knowledge.sql','010_support_facts.sql','011_policy_lifecycle.sql']
         for name in migrations:
             path=ROOT/'sql'/name
             if not path.is_file():raise ValueError('缺必要迁移文件：'+name)

@@ -436,9 +436,24 @@ def run_agent(settings, engine, message: str, buyer_id: str, history: list,
     support_repair_count = 0
     support_result_for_fallback = None
 
+    def finish_policy_changed(check):
+        from support_runtime import policy_lifecycle_stop_answer
+        trace.append({"stage": "policy_lifecycle_guard", "check": deepcopy(check),
+                      "frozen_policy_is_current": False})
+        result = finish("partial", policy_lifecycle_stop_answer(check))
+        result["evidence_status"] = "partial_tool_results"
+        result["support_validation"] = {"passed": False, "errors": ["policy_source_no_longer_current"],
+                                        "lifecycle_check": deepcopy(check), "repair_attempted": bool(support_repair_count),
+                                        "repair_count": support_repair_count, "attempts": deepcopy(support_attempts)}
+        return result
+
     def finish_support_fallback(reason=None):
         """修正失败仍保留已查事实；取消/截止由调用前的统一检查优先处理。"""
         from support_claims import fallback_support_claims
+        from support_runtime import check_policy_references, policy_lifecycle_blocks
+        check = check_policy_references(engine, support_result_for_fallback)
+        if policy_lifecycle_blocks(check):
+            return finish_policy_changed(check)
         validation = {"passed": False, "errors": list(support_attempts[-1]["errors"]) if support_attempts else [],
                       "scope": "typed_claim_evidence_bindings_not_universal_semantics",
                       "contract_version": 2, "repair_attempted": bool(support_repair_count),
@@ -701,6 +716,11 @@ def run_agent(settings, engine, message: str, buyer_id: str, history: list,
                             return finish("failed", "模型没有读取本轮订单与政策，未把无依据回答作为售后结果。")
                         support_result = support_facts[-1]
                         support_result_for_fallback = support_result
+                        from support_runtime import check_policy_references, policy_lifecycle_blocks
+                        check = check_policy_references(engine, support_result)
+                        event["policy_lifecycle_check"] = deepcopy(check)
+                        if policy_lifecycle_blocks(check):
+                            return finish_policy_changed(check)
                         try:
                             body_final = json.loads(assistant.get("content") or "")
                             if not isinstance(body_final, dict):
@@ -844,6 +864,10 @@ def run_agent(settings, engine, message: str, buyer_id: str, history: list,
                         return finish("cancelled", "任务已取消，已完成的只读工具结果保留。")
                     result_text = json.dumps(result, ensure_ascii=False)
                     if name == "review_after_sales" and result.get("status") not in {"failed", "error"}:
+                        from support_runtime import check_policy_references, policy_lifecycle_blocks
+                        check = check_policy_references(engine, result)
+                        if policy_lifecycle_blocks(check):
+                            return finish_policy_changed(check)
                         from support_claims import build_support_claim_catalog
                         # 仅发送副本携带输出目录；原始事实及来源快照保持原样供展开/导出。
                         from support_context import compact_support_tool_view

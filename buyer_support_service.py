@@ -126,6 +126,12 @@ def evaluate_buyer_support(context: dict, policy_bundle: dict, *, claims=None, n
             raise ValueError("invalid time sequence")
     except (TypeError, KeyError, ValueError):
         return {**common, "status": "data_error", "message": "补充事实时间不一致或晚于查询时刻，不能据此判断。"}
+    if policy_bundle.get("status") in {"withdrawn", "superseded_without_valid_replacement"}:
+        # 撤回只阻止政策推导，不抹掉已授权读取的订单事实，也不套用其他月份条款。
+        return {**common, "status": "insufficient_evidence", "policy_status": policy_bundle["status"],
+                "reason": policy_bundle.get("reason", "applicable_policy_withdrawn"),
+                "policy_lifecycle": deepcopy(policy_bundle.get("lifecycle", {})),
+                "message": "订单事实已保留；适用政策已撤回且当前没有可用更正版，暂不能判断退货资格或运费承担。"}
     if (policy_bundle.get("status") != "ok" or facts.get("source_kind") != "synthetic_demo"):
         return {**common, "status": "insufficient_evidence", "message": "未取得此店铺、商品类别和支付时刻适用的政策原文。"}
     applicability = policy_bundle.get("applicability", {})

@@ -75,6 +75,7 @@ class MemoryDecision(BaseModel):
 
 def public_record(record: dict) -> dict:
     """普通接口不返回内部对话提示；事实和本次调用摘要供本人核查。"""
+    from policy_review import has_policy_references
     result = record.get("result") or {}
     return {k: record.get(k) for k in ("id", "session_id", "message", "status", "created_at", "updated_at", "answer", "error")} | {
         "facts": result.get("facts", []), "usage": result.get("usage", {}),
@@ -83,6 +84,7 @@ def public_record(record: dict) -> dict:
         "conditions": public_condition_state(result["condition_state"]) if result.get("condition_state") else None,
         "memory": result.get("memory"),
         "presentation": result.get("presentation"),
+        "policy_status_check_available": has_policy_references(record),
         "memory_update": public_memory_update(result),
         "execution_mode": record.get("execution_mode", "single"),
         "support_validation": result.get("support_validation"),
@@ -437,5 +439,23 @@ def create_app(settings=None, engine=None, agent=run_agent, preference_engine=No
             raise HTTPException(404, "任务不存在")
         # 导出包含事实/真实模型请求响应，供本机核查；凭据未进入记录。
         return JSONResponse(record, headers={"Content-Disposition": f'attachment; filename="task-{task_id}.json"'})
+
+    @app.get("/api/tasks/{task_id}/policy-status")
+    def policy_status(task_id: str, buyer=Depends(current_buyer)):
+        record = owned_task(task_id, buyer)
+        if record is None:
+            raise HTTPException(404, "任务不存在")
+        from policy_review import review_task_policies
+        return review_task_policies(engine, record)
+
+    @app.get("/api/tasks/{task_id}/policy-status/export")
+    def export_policy_review(task_id: str, buyer=Depends(current_buyer)):
+        record = owned_task(task_id, buyer)
+        if record is None:
+            raise HTTPException(404, "任务不存在")
+        from policy_review import review_task_policies
+        # 新核对附件包含原记录和当下状态；原导出接口与任务文件完全保留。
+        package = {'original_task': record, 'current_policy_review': review_task_policies(engine, record)}
+        return JSONResponse(package, headers={"Content-Disposition": f'attachment; filename="policy-review-{task_id}.json"'})
 
     return app

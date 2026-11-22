@@ -66,6 +66,12 @@ def build_support_claim_catalog(result):
         add('evidence_gap', blocked[status])
         add('boundary', '仅合成演示，只读核查；未批准、受理或执行退货退款。')
         return catalog
+    if (result.get('policy_status') in {'withdrawn', 'corrected', 'superseded_without_valid_replacement', 'check_failed', 'invalid_policy', 'conflict', 'missing'}
+            or result.get('policy_lifecycle_check', {}).get('status') in {'withdrawn', 'corrected', 'check_failed', 'invalid_policy', 'conflict', 'missing'}):
+        # 只声明程序状态，不拿撤回条款给资格/运费结论背书。
+        add('policy_source_unavailable', '订单事实已保留；政策已撤回、更正或有效性无法确认，暂停退货资格与运费判断，需重新取得适用依据。')
+        add('boundary', '原冻结条款仅作历史审计；只读核查，未批准、受理或执行退货退款。')
+        return catalog
 
     topics = result.get('requested_topics', [])
     rules = result.get('applicable_rules', {})

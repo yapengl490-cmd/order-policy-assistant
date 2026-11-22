@@ -12,7 +12,7 @@ import math
 import re
 import time
 
-from sqlalchemy import (Column, DateTime, ForeignKey, Integer, JSON, MetaData, Table, Text,
+from sqlalchemy import (CheckConstraint, Column, DateTime, ForeignKey, Integer, JSON, MetaData, Table, Text,
                         UniqueConstraint, and_, insert, select, text, update)
 from sqlalchemy.exc import IntegrityError
 
@@ -38,6 +38,19 @@ policy_chunks = Table("policy_chunks", metadata,
     Column("embedding_model", Text), Column("embedding_dimension", Integer),
     Column("embedding_source", Text), Column("embedding_text_checksum", Text),
     Column("embedded_at", DateTime(timezone=True)), UniqueConstraint("document_id", "section"))
+# 生命周期属于同一份元数据；测试 create_all 与正式 011 迁移使用同一结构。
+# 事件追加保存，原政策/原分块不覆盖；应用读账号不能更改这些事件。
+policy_lifecycle_events = Table("policy_lifecycle_events", metadata,
+    Column("event_id", Text, primary_key=True),
+    Column("document_id", Text, ForeignKey("public.policy_documents.document_id"), nullable=False),
+    Column("event_index", Integer, nullable=False), Column("action", Text, nullable=False),
+    Column("replacement_document_id", Text, ForeignKey("public.policy_documents.document_id")),
+    Column("document_checksum", Text, nullable=False), Column("reason", Text, nullable=False),
+    Column("actor", Text, nullable=False), Column("recorded_at", DateTime(timezone=True), nullable=False),
+    UniqueConstraint("document_id", "event_index"), UniqueConstraint("replacement_document_id"),
+    CheckConstraint("event_index > 0"),
+    CheckConstraint("(action = 'withdrawn' AND replacement_document_id IS NULL) OR "
+                    "(action = 'corrected' AND replacement_document_id IS NOT NULL)"))
 
 
 class PolicyConflictError(ValueError):
@@ -56,6 +69,35 @@ def _lock_scopes(connection, scopes):
         for scope in sorted(set(scopes)):
             key = int.from_bytes(hashlib.sha256(("policy:" + scope[0] + ":" + scope[1]).encode()).digest()[:8], "big", signed=True)
             connection.execute(text("SELECT pg_advisory_xact_lock(:key)"), {"key": key})
+
+
+def _lifecycle_states(connection, document_ids):
+    """事件表必须已迁移；数据库错误不降级成“政策仍有效”。"""
+    states = {identity: {"status": "active", "document_id": identity, "event_index": 0}
+              for identity in document_ids}
+    if not states:
+        return states
+    rows = connection.execute(select(policy_lifecycle_events).where(
+        policy_lifecycle_events.c.document_id.in_(states)).order_by(
+            policy_lifecycle_events.c.document_id, policy_lifecycle_events.c.event_index)).mappings()
+    for row in rows:
+        previous = states[row["document_id"]]
+        if (row["event_index"] != previous["event_index"] + 1
+                or previous["status"] == "corrected"
+                or (previous["status"] == "withdrawn" and row["action"] != "corrected")):
+            raise PolicyConflictError("政策生命周期事件不连续或状态冲突")
+        states[row["document_id"]] = {**dict(row), "status": row["action"],
+            "recorded_at": _db_time(row["recorded_at"], connection).isoformat()}
+    return states
+
+
+def _insert_document(connection, doc):
+    fields = {key: doc[key] for key in ("document_id", "store_id", "category", "version", "title",
+                                        "source_kind", "checksum", "source_path", "source_text")}
+    connection.execute(insert(policy_documents).values(**fields,
+        effective_from=aware_time(doc["effective_from"]), effective_before=aware_time(doc["effective_before"]),
+        imported_at=datetime.now(timezone.utc)))
+    connection.execute(insert(policy_chunks), [{**chunk, "document_id": doc["document_id"]} for chunk in doc["chunks"]])
 
 
 def import_policy_files(engine, paths):
@@ -83,9 +125,7 @@ def import_policy_files(engine, paths):
                 for row in matching:
                     if row["version"] == doc["version"] or start < _db_time(row["effective_before"], connection) and _db_time(row["effective_from"], connection) < end:
                         raise PolicyConflictError("同店同品类的版本标签冲突或适用时间重叠，整批未导入")
-                fields = {key: doc[key] for key in ("document_id", "store_id", "category", "version", "title", "source_kind", "checksum", "source_path", "source_text")}
-                connection.execute(insert(policy_documents).values(**fields, effective_from=start, effective_before=end, imported_at=datetime.now(timezone.utc)))
-                connection.execute(insert(policy_chunks), [{**chunk, "document_id": doc["document_id"]} for chunk in doc["chunks"]])
+                _insert_document(connection, doc)
                 imported.append(doc["document_id"])
     except IntegrityError:
         raise PolicyConflictError("数据库唯一性/关联约束拒绝，整批未导入") from None
@@ -126,13 +166,43 @@ def select_policy(engine, *, store_id, category, paid_at):
     with engine.connect() as connection:
         rows = connection.execute(select(policy_documents).where(policy_documents.c.store_id == store_id,
             policy_documents.c.category == category, policy_documents.c.effective_from <= paid_at,
-            policy_documents.c.effective_before > paid_at).limit(2)).mappings().all()
+            policy_documents.c.effective_before > paid_at)).mappings().all()
         if not rows:
             return {"status": "insufficient_evidence", "reason": "no_applicable_policy", "applicability": applicability,
                     "notice": "未找到支付时适用的受控政策，不使用其他版本补猜"}
-        if len(rows) != 1:
+        states = _lifecycle_states(connection, [row["document_id"] for row in rows])
+        by_id = {row["document_id"]: row for row in rows}
+        replacements = {identity: state["replacement_document_id"] for identity, state in states.items()
+                        if state["status"] == "corrected"}
+        roots = set(by_id) - set(replacements.values())
+        if len(roots) != 1 or any(identity not in by_id for identity in replacements.values()):
             return {"status": "conflict", "reason": "overlapping_policy_versions", "applicability": applicability}
-        return _bundle(connection, rows[0], paid_at)
+        identity = next(iter(roots)); chain = []
+        while identity not in chain:
+            chain.append(identity)
+            if identity not in replacements:
+                break
+            identity = replacements[identity]
+        if len(set(chain)) != len(rows) or identity in replacements:
+            return {"status": "conflict", "reason": "invalid_policy_revision_chain", "applicability": applicability}
+        first = by_id[chain[0]]
+        if any(_db_time(row[key], connection) != _db_time(first[key], connection)
+               for row in rows for key in ("effective_from", "effective_before")):
+            return {"status": "conflict", "reason": "revision_period_mismatch", "applicability": applicability}
+        if any(state.get("document_checksum", by_id[key]["checksum"]) != by_id[key]["checksum"]
+               for key, state in states.items()):
+            return {"status": "invalid_policy", "reason": "lifecycle_checksum_mismatch", "applicability": applicability}
+        current = by_id[identity]
+        state = states[identity]
+        lifecycle = {"status": state["status"], "document_id": identity, "version": current["version"],
+            "document_checksum": current["checksum"], "reason": state.get("reason"),
+            "recorded_at": state.get("recorded_at"), "replacement_document_id": state.get("replacement_document_id"),
+            "revision_chain": chain}
+        if lifecycle["status"] == "withdrawn":
+            return {"status": "withdrawn", "reason": "applicable_policy_withdrawn", "applicability": applicability,
+                    "lifecycle": lifecycle, "notice": "该支付时段的政策依据已撤回，暂无可信更正版；不能据此判断售后，不回退其他版本。"}
+        bundle = _bundle(connection, current, paid_at)
+        return {**bundle, "lifecycle": lifecycle}
 
 
 def _ready_embedding(row, source):
@@ -153,7 +223,9 @@ def index_policy_embeddings(engine, embedder, document_ids=None, *, allow_test_v
         raise ValueError("生产索引不接受离线替身向量")
     if document_ids is not None and (not isinstance(document_ids, (list, tuple)) or not 1 <= len(document_ids) <= 20):
         raise ValueError("明确文档列表须为1至20个")
-    statement = select(policy_chunks).order_by(policy_chunks.c.chunk_id)
+    # 历史原文和旧向量保留供审计，但只为当前有效修订准备索引。
+    statement = select(policy_chunks).where(~policy_chunks.c.document_id.in_(
+        select(policy_lifecycle_events.c.document_id))).order_by(policy_chunks.c.chunk_id)
     if document_ids is not None:
         statement = statement.where(policy_chunks.c.document_id.in_(document_ids))
     with engine.connect() as connection:
@@ -167,15 +239,22 @@ def index_policy_embeddings(engine, embedder, document_ids=None, *, allow_test_v
     if len(rows) > 32:
         raise ValueError("小索引一次最多32块，请显式缩小文档列表")
     if document_ids is not None and set(document_ids) != {row["document_id"] for row in rows}:
-        raise ValueError("所选文档不存在或缺失完整分块")
+        raise ValueError("所选文档不存在、已撤回/替代或缺失完整分块")
     pending = [dict(row) for row in rows if not _ready_embedding(row, source)]
     if not pending:
         return {"status": "unchanged", "indexed_chunks": 0, "embedding_requests": 0, "source": source}
+    with engine.connect() as connection:
+        if any(state["status"] != "active" for state in _lifecycle_states(connection, doc_ids).values()):
+            raise PolicyConflictError("索引调用前政策已撤回或替代，未调用嵌入服务")
     result = embedder.embed_texts([row["text"] for row in pending])
     if result.get("model") != MODEL or result.get("dimension") != DIMENSION or result.get("source") != source or len(result.get("vectors", [])) != len(pending):
         raise EmbeddingError("index_response_mismatch")
     vectors = [validate_vector(vector) for vector in result["vectors"]]
     with engine.begin() as connection:
+        documents = connection.execute(select(policy_documents).where(policy_documents.c.document_id.in_(doc_ids))).mappings().all()
+        _lock_scopes(connection, [(doc["store_id"], doc["category"]) for doc in documents])
+        if any(state["status"] != "active" for state in _lifecycle_states(connection, doc_ids).values()):
+            raise PolicyConflictError("嵌入请求期间政策被撤回或替代，整批索引未写入")
         for row, vector in zip(pending, vectors):
             # 乐观内容校验避免请求期间文档被改后仍写入旧向量；全部处于同一事务。
             changed = connection.execute(update(policy_chunks).where(policy_chunks.c.chunk_id == row["chunk_id"],
@@ -220,7 +299,8 @@ def search_policy_chunks(engine, query, *, store_id, category, paid_at, mode="ke
     bundle = select_policy(engine, store_id=store_id, category=category, paid_at=paid_at)
     stats = {"candidate_count": 0, "embedding_requests": 0, "reranker": "not_enabled", "comparison_basis": "same_filtered_candidates"}
     if bundle["status"] != "ok":
-        return {"status": bundle["status"], "reason": bundle.get("reason"), "results": [], "stats": stats}
+        return {"status": bundle["status"], "reason": bundle.get("reason"), "results": [], "stats": stats,
+                "lifecycle": bundle.get("lifecycle"), "notice": bundle.get("notice")}
     chunks = bundle["chunks"]
     candidate_ids = sorted(chunk["chunk_id"] for chunk in chunks)
     stats.update(candidate_count=len(chunks), candidate_ids=candidate_ids, filter_basis=bundle["applicability"],
@@ -258,6 +338,13 @@ def search_policy_chunks(engine, query, *, store_id, category, paid_at, mode="ke
     except EmbeddingError as error:
         stats.update(embedding_requests=1, embedding_error=error.code, embedding_stats=dict(getattr(embedder, "last_stats", {})))
         return {**common, "status": "embedding_failed", "reason": error.code, "results": []}
+    # 外部嵌入等待期间可能完成撤回/更正；不能把旧候选当成新查询的有效依据。
+    latest = select_policy(engine, store_id=store_id, category=category, paid_at=paid_at)
+    if latest["status"] != "ok" or latest["document"]["checksum"] != bundle["document"]["checksum"]:
+        stats["embedding_requests"] = 1
+        return {"status": latest["status"] if latest["status"] != "ok" else "insufficient_evidence",
+                "reason": latest.get("reason", "policy_revision_changed_during_retrieval"),
+                "lifecycle": latest.get("lifecycle"), "notice": latest.get("notice"), "results": [], "stats": stats}
     vector_started = time.monotonic()
     cosine = {identity: _cosine(query_vector, validate_vector(row["embedding"])) for identity, row in vectors.items()}
     vector_order = sorted(chunks, key=lambda chunk: (-cosine[chunk["chunk_id"]], chunk["chunk_id"]))

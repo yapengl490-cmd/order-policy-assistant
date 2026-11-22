@@ -191,3 +191,25 @@ test("购物任务偏好注明原币保留，元分偏好不能暗示美元已�
   assert.match(h.el("task-preferences").textContent,/元\/分格式仅适用于人民币.*保留来源币种.*不按语言或偏好换汇/);
   assert.equal(h.prefRequests().filter(r=>r.method!=="GET").length,0);
 });
+
+test("旧政策撤回只加当前告警，不改旧回答与原导出",async()=>{
+  const h=harness();h.rows=[{id:"policy-old",status:"completed",message:"旧查询",answer:"当时的原回答",facts:[],policy_status_check_available:true}];
+  h.route=r=>r.path==="/api/tasks/policy-old/policy-status"?reply({status:"warning",message:"依据已撤回，原报告保留",sources:[{document_id:"DEMO-OCT",status:"withdrawn",reason:"录入错误"}]}):undefined;
+  await h.login();h.el("history").children[0].children[1].onclick();await flush();
+  assert.match(h.el("task-policy-review").textContent,/依据已撤回.*原报告保留.*DEMO-OCT.*录入错误/);
+  assert.match(h.el("task-policy-review").textContent,/下载原报告及当前状态/);
+  assert.equal(h.rows[0].answer,"当时的原回答");
+  assert.equal(h.requests.filter(r=>r.method!=="GET").length,0);
+  h.el("new-chat").onclick();assert.equal(h.el("task-policy-review").textContent,"");
+});
+
+test("核对失败不能假称旧政策有效；退出后迟到告警不能串账号",async()=>{
+  const h=harness(),pending=deferred();h.rows=[{id:"policy-old",status:"completed",message:"旧查询",answer:"原回答",facts:[],policy_status_check_available:true}];
+  h.route=r=>r.path==="/api/tasks/policy-old/policy-status"?pending.promise:undefined;
+  await h.login();h.el("history").children[0].children[1].onclick();await flush();h.logout();
+  pending.resolve(reply({status:"warning",message:"私人旧政策已撤回",sources:[]}));await flush();
+  assert.equal(h.el("task-policy-review").textContent,"");
+  h.route=r=>r.path==="/api/tasks/policy-old/policy-status"?reply({detail:"故障"},503):undefined;
+  await h.login();h.el("history").children[0].children[1].onclick();await flush();
+  assert.match(h.el("task-policy-review").textContent,/无法核对.*不能认定旧依据仍有效.*未改动/);
+});

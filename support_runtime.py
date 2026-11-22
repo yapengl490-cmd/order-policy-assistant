@@ -6,6 +6,71 @@ import re
 from zoneinfo import ZoneInfo
 
 
+def check_policy_references(engine, result):
+    """核查冻结政策是否仍有效，不改原事实、重选版本或增加模型调用。
+
+    无数据库仅供已有工具替身测试；返回not_checked，不能作为真实核库证据。
+    生产库查询失败必须停止使用旧规则，不能把失败当成政策仍有效。
+    """
+    from policy_lifecycle import validate_policy_reference
+    prior_check = result.get('policy_lifecycle_check')
+    if isinstance(prior_check, dict) and policy_lifecycle_blocks(prior_check):
+        return deepcopy(prior_check)
+    nodes = ([result] + list(result.get('return_policies', {}).values())
+             + list(result.get('return_policy_checks', [])))
+    references = {}
+    for node in nodes:
+        if not isinstance(node, dict):
+            continue
+        policy_status = node.get('policy_status') or node.get('status')
+        if node.get('reason') == 'applicable_policy_withdrawn':
+            policy_status = 'withdrawn'
+        if policy_status in {'withdrawn', 'corrected', 'superseded_without_valid_replacement', 'check_failed', 'invalid_policy', 'conflict'}:
+            return {'status': policy_status, 'reason': node.get('reason', 'policy_source_unavailable'),
+                    'lifecycle': deepcopy(node.get('policy_lifecycle') or node.get('lifecycle') or {}),
+                    'current_policy_verified': False}
+        sources = list((node.get('citation_index') or {}).values()) + list((node.get('citations') or {}).values())
+        document = node.get('document')
+        if isinstance(document, dict):
+            sources.append({'document_id': document.get('document_id'), 'document_checksum': document.get('checksum')})
+        for source in sources:
+            if not isinstance(source, dict):
+                continue
+            identity, checksum = source.get('document_id'), source.get('document_checksum')
+            if isinstance(identity, str) and isinstance(checksum, str):
+                if identity in references and references[identity] != checksum:
+                    return {'status': 'invalid_policy', 'reason': 'conflicting_frozen_checksums', 'current_policy_verified': False}
+                references[identity] = checksum
+    if engine is None:
+        return {'status': 'not_checked', 'reason': 'no_database_in_tool_double', 'current_policy_verified': False}
+    if not references:
+        status = 'invalid_policy' if result.get('policy_version') else 'not_applicable'
+        return {'status': status, 'reason': 'no_frozen_policy_reference', 'current_policy_verified': False}
+    checked = []
+    try:
+        for identity, checksum in sorted(references.items()):
+            current = validate_policy_reference(engine, document_id=identity, document_checksum=checksum)
+            checked.append({'document_id': identity, **current})
+            if current.get('status') != 'ok':
+                return {**current, 'references': checked, 'current_policy_verified': False}
+    except Exception as exc:
+        return {'status': 'check_failed', 'reason': 'policy_lifecycle_check_failed',
+                'error_type': type(exc).__name__, 'current_policy_verified': False}
+    return {'status': 'ok', 'references': checked, 'current_policy_verified': True}
+
+
+def policy_lifecycle_blocks(check):
+    return check.get('status') not in {'ok', 'not_applicable', 'not_checked'}
+
+
+def policy_lifecycle_stop_answer(check):
+    reason = ('已撤回' if check.get('status') == 'withdrawn' else
+              '已被更正替代' if check.get('status') == 'corrected' else '当前有效性未能确认')
+    return ('本轮已取得的事实保留，但本轮引用的政策' + reason
+            + '，暂不能据旧条款判断退货资格、运费或是否满足可退要求。'
+            '原冻结依据仅作历史审计，不再作为本次有效结论；请重新查询取得当前适用依据。程序没有自动重试模型或执行退款。')
+
+
 def review_after_sales(engine, order_id, *, buyer_id=None, shop_id=None, state, should_cancel=lambda:False):
     from buyer_support_service import get_support_context
     if should_cancel():
@@ -26,6 +91,8 @@ def review_support_context(engine, context, *, state, should_cancel=lambda:False
     now = datetime.fromisoformat((state['confirmed'].get('assessment_at') or state['defaults']['assessment_at'])['value'])
     policy = {'status':'insufficient_evidence'}
     retrieval = {'status':'not_run','reason':'no_authorized_order_context'}
+    lifecycle_check = None
+    frozen_policy_audit = None
     facts, order = context.get('trusted_facts',{}), context.get('order',{}) or {}
     if context.get('status') == 'ok' and order.get('shop_id') and facts.get('product_category'):
         scope = dict(store_id=order['shop_id'], category=facts['product_category'], paid_at=datetime.fromisoformat(order['paid_at']))
@@ -45,7 +112,26 @@ def review_support_context(engine, context, *, state, should_cancel=lambda:False
                     retrieval[rank_key] = [{'chunk_id': x['chunk_id'], 'score': x['score']} for x in retrieval[rank_key]]
             if should_cancel():
                 raise InterruptedError('cancelled_after_retrieval')
+            lifecycle_check = check_policy_references(engine, policy)
+            if (retrieval.get('status') in {'withdrawn', 'corrected', 'conflict', 'invalid_policy'}
+                    or retrieval.get('reason') == 'policy_revision_changed_during_retrieval'):
+                lifecycle_check = {'status': retrieval.get('status') if retrieval.get('status') != 'ok' else 'corrected',
+                    'reason': retrieval.get('reason'), 'lifecycle': deepcopy(retrieval.get('lifecycle', {})),
+                    'current_policy_verified': False}
+                # 某些补查用insufficient_evidence表示换版，也不能回退第一次ok规则。
+                if lifecycle_check['status'] == 'insufficient_evidence':
+                    lifecycle_check['status'] = 'corrected'
+            if policy_lifecycle_blocks(lifecycle_check):
+                frozen_policy_audit = {'is_current_policy': False, 'snapshot': deepcopy(policy)}
+                policy = {'status': lifecycle_check['status'], 'reason': lifecycle_check.get('reason'),
+                          'lifecycle': deepcopy(lifecycle_check.get('lifecycle', {}))}
     result = evaluate_buyer_support(context, policy, claims=claims, now=now, topics=state.get('topics'))
+    if lifecycle_check is not None:
+        result['policy_lifecycle_check'] = lifecycle_check
+        if policy_lifecycle_blocks(lifecycle_check):
+            result.update(status='insufficient_evidence', policy_status=lifecycle_check['status'],
+                          reason=lifecycle_check.get('reason'), message=policy_lifecycle_stop_answer(lifecycle_check),
+                          frozen_policy_audit=frozen_policy_audit)
     # 所有必须适用的条款由规则判断引用；语义召回辅助解释，不能漏召回例外后放宽规则。
     # 仅保留已经匹配到本单的规则，用于简短展示必要条件；不加载咨询时的新政策。
     if result.get('policy_version'):

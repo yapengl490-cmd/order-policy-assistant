@@ -23,16 +23,21 @@ def catalog_answer(fact, selected=None, display=None):
     for policy in fact.get('return_policies', {}).values():
         for claim in policy.get('claims', []):
             policy_lines.append(claim['text'] + ' ' + ' '.join('['+key+']' for key in claim['citation_ids']))
+    policy_withdrawn = any(check.get('reason') == 'applicable_policy_withdrawn'
+                           for check in fact.get('return_policy_checks', []))
     if fact.get('status') != 'matched':
         if fact.get('status') == 'clarification':
             return '请补充商品类别、明确币种和预算上限。'
-        summary=('政策读取或来源校验未完成，暂不能给出满足退货要求的推荐。' if fact.get('policy_errors')
+        summary=('适用政策已撤回，暂不能确认满足可退要求；这不代表商品不存在。' if policy_withdrawn else
+                 '政策读取或来源校验未完成，暂不能给出满足退货要求的推荐。' if fact.get('policy_errors')
                  else '当前目录没有已核实满足全部条件的商品。')
         return (summary + fact.get('policy_notice','') +
                 '资料缺失或过期不代表店铺一定没有此类商品。\n'+ '\n'.join(policy_lines) + '\n'+fact.get('notice',''))
     rows={item['variant_id']:item for item in fact['candidates']}
     chosen=selected if selected is not None else list(rows)
     lines=['以下是合成商品快照中的匹配规格，按本次条件比较：']
+    if policy_withdrawn:
+        lines.append('部分商品的适用政策已撤回，仅保留商品事实；等待可用更正版后再判断退货要求。')
     if fact.get('policy_followup') and len(chosen)>1:
         lines.append('本次仍有多个候选，下面分别列出；未替你把“这款”猜成某一个规格。')
     if fact.get('policy_errors'):lines.append('政策读取或来源校验未完成；以下仅保留已查到的商品规格，不确认退货条件。')
@@ -84,6 +89,7 @@ def run_shopping_agent(settings, engine, message, buyer_id, history, should_canc
     from general_policy import lookup_general_policy,render_general_policy
     from catalog_conditions import catalog_requirements
     from catalog_recommendations import CatalogScope,CatalogSnapshot,recommend
+    from support_runtime import check_policy_references, policy_lifecycle_blocks, policy_lifecycle_stop_answer
     state=deepcopy(condition_state or {})
     # 只合并创建任务时的可信快照与本次展示要求；运行期间不重读、不回写长期库。
     memory=_preference_memory(preference_snapshot,access_role,message)
@@ -102,6 +108,13 @@ def run_shopping_agent(settings, engine, message, buyer_id, history, should_canc
     def stopped():
         status=budget.stop_status()
         return finish(status,'任务已取消或达到时间上限，停止后续调用；已发出的远端请求不能撤回。') if status else None
+    def stop_invalid_policy(check):
+        trace.append({'stage':'policy_lifecycle_guard','check':deepcopy(check),'frozen_policy_is_current':False})
+        output=finish('partial',policy_lifecycle_stop_answer(check),
+                      {'passed':False,'errors':['policy_source_no_longer_current'],'lifecycle_check':deepcopy(check),
+                       'repair_attempted':repair})
+        output['evidence_status']='partial_tool_results'
+        return output
     if access_role not in {'buyer','merchant'} or not buyer_id or (access_role=='merchant' and not shop_id):
         return finish('failed','缺少可信身份或店铺范围。')
     if state.get('kind') not in {'catalog','general_policy','shopify_order','shopify_policy'} or state.get('schema_version')!=1:
@@ -225,10 +238,17 @@ def run_shopping_agent(settings, engine, message, buyer_id, history, should_canc
                     facts.append({'tool':name,'arguments':{},'result':deepcopy(fact),'result_snapshot_sha256':snapshot_hash,'observed_at':tool_event['finished_at']})
                     stop=stopped()
                     if stop:return stop
+                    if kind in {'catalog','general_policy'}:
+                        check=check_policy_references(engine,fact)
+                        if policy_lifecycle_blocks(check):return stop_invalid_policy(check)
                     messages.extend([assistant,{'role':'tool','tool_call_id':call['id'],'content':json.dumps(fact,ensure_ascii=False)}]);continue
                 if choice.get('finish_reason')!='stop' or not facts:
                     return finish('failed','模型未读取本轮依据或响应未完整结束，未采纳回答。')
                 fact=facts[-1]['result']
+                if kind in {'catalog','general_policy'}:
+                    check=check_policy_references(engine,fact)
+                    event['policy_lifecycle_check']=deepcopy(check)
+                    if policy_lifecycle_blocks(check):return stop_invalid_policy(check)
                 try:final=json.loads(assistant.get('content') or '')
                 except (ValueError,TypeError):final=None
                 errors=validate_selection(final,fact,kind)

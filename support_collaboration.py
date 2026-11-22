@@ -47,6 +47,7 @@ def evidence_gaps(result):
 
 def lookup_frozen_policy_evidence(engine, context, result, *, should_cancel=lambda: False):
     from policy_kb import search_policy_chunks
+    from support_runtime import check_policy_references, policy_lifecycle_blocks
     gaps = evidence_gaps(result)
     if not gaps: raise ValueError('no_retrievable_policy_gap')
     if should_cancel(): raise InterruptedError('cancelled_before_followup')
@@ -56,6 +57,15 @@ def lookup_frozen_policy_evidence(engine, context, result, *, should_cancel=lamb
     retrieved = search_policy_chunks(engine, query, store_id=order['shop_id'], category=trusted['product_category'],
         paid_at=datetime.fromisoformat(order['paid_at']), mode='keyword', limit=4)
     if should_cancel(): raise InterruptedError('cancelled_after_followup')
+    check = check_policy_references(engine, result)
+    if (retrieved.get('status') in {'withdrawn', 'corrected', 'conflict', 'invalid_policy'}
+            or retrieved.get('reason') == 'policy_revision_changed_during_retrieval'):
+        check = {'status': 'corrected' if retrieved.get('reason') == 'policy_revision_changed_during_retrieval' else retrieved['status'], 'reason': retrieved.get('reason'),
+                 'lifecycle': deepcopy(retrieved.get('lifecycle', {})), 'current_policy_verified': False}
+    if policy_lifecycle_blocks(check):
+        return {'status': check['status'], 'reason': check.get('reason'), 'results': [],
+                'decision_changed': False, 'policy_lifecycle_check': check,
+                'notice': '冻结政策已失效或有效性无法确认，补查不能继续使用旧资格结论。'}
     # 再查询期间库可能变化；仅接受冻结判定已核的原文，不让补查偷偷换版。
     index, valid = result['citation_index'], []
     for chunk in retrieved.get('results', []):
@@ -80,7 +90,8 @@ def run_support_collaboration(settings, engine, message, buyer_id, history, shou
     from agent_runtime import _history_pairs, _preference_memory
     from answer_quality import measure_answer
     from buyer_support_service import get_support_context
-    from support_runtime import review_support_context, expected_decision
+    from support_runtime import (review_support_context, expected_decision, check_policy_references,
+                                 policy_lifecycle_blocks, policy_lifecycle_stop_answer)
     from support_claims import build_support_claim_catalog, validate_support_claims, render_support_claims, fallback_support_claims
     from support_context import compact_support_tool_view
     state = deepcopy(condition_state or {})
@@ -120,6 +131,15 @@ def run_support_collaboration(settings, engine, message, buyer_id, history, shou
     def stopped():
         status = budget.stop_status()
         return finish(status, '任务已取消或达到时间上限，停止后续调用；已取得事实保留。') if status else None
+
+    def stop_invalid_policy(check):
+        trace.append({'stage': 'policy_lifecycle_guard', 'branch': active['name'], 'check': deepcopy(check),
+                      'frozen_policy_is_current': False})
+        active['status'] = 'partial'
+        return finish('partial', policy_lifecycle_stop_answer(check),
+                      {'passed': False, 'errors': ['policy_source_no_longer_current'],
+                       'lifecycle_check': deepcopy(check), 'repair_attempted': bool(repair_count),
+                       'repair_count': repair_count, 'attempts': deepcopy(attempts)})
 
     def fail(reason):
         trace.append({'stage': 'dependency_failure', 'branch': active['name'], 'reason': reason})
@@ -250,6 +270,9 @@ def run_support_collaboration(settings, engine, message, buyer_id, history, shou
                 return fail('policy_result_changed_frozen_order')
             if result.get('status') not in {'ok', 'clarification', 'insufficient_evidence'}:
                 return fail('policy_result_not_usable')
+            check = check_policy_references(engine, result)
+            if policy_lifecycle_blocks(check):
+                return stop_invalid_policy(check)
             # 与旧网页事实合同兼容；别名不新增调用，trace保留实际工具名。
             facts[-1]['tool'] = 'review_after_sales'
             gaps = evidence_gaps(result); followup.update(status='available' if gaps else 'not_needed', gaps=gaps)
@@ -271,9 +294,18 @@ def run_support_collaboration(settings, engine, message, buyer_id, history, shou
                     if extra is None: return stopped() or finish('limited', '补查工具共同额度不足。')
                     followup['status'] = extra.get('status', 'failed')
                     if (stop := stopped()) is not None: return stop
+                    check = extra.get('policy_lifecycle_check') or check_policy_references(engine, result)
+                    if extra.get('status') in {'withdrawn', 'corrected', 'conflict', 'invalid_policy', 'check_failed', 'missing'}:
+                        check = {'status': extra['status'], 'reason': extra.get('reason'), 'current_policy_verified': False}
+                    if policy_lifecycle_blocks(check):
+                        return stop_invalid_policy(check)
                     messages += [choice['message'], {'role': 'tool', 'tool_call_id': call['id'], 'content': json.dumps(_model_view(extra), ensure_ascii=False)}]
                     continue
                 if choice.get('finish_reason') != 'stop': return fail('incomplete_final_response')
+                check = check_policy_references(engine, result)
+                event['policy_lifecycle_check'] = deepcopy(check)
+                if policy_lifecycle_blocks(check):
+                    return stop_invalid_policy(check)
                 try: final = json.loads(choice['message'].get('content') or '')
                 except (TypeError, ValueError): final = None
                 errors = validate_support_claims(final, result)

@@ -5,6 +5,7 @@ let token="",session=crypto.randomUUID(),currentTask=null,polling=false,mode="bu
 let executionMode="single";
 let preferences=null,preferenceBusy=false,preferenceRevision=0,lastOrder=null;
 let displayedTaskId=null;
+let policyReviewRevision=0;
 let activePoll=null,comparisonSnapshot=null,comparisonRevision=0,comparisonBusy=false;
 const comparisonFields={first_from:"first-from",first_before:"first-before",second_from:"second-from",second_before:"second-before",refund_before:"compare-cutoff"};
 const memoryActions=new Map(),memoryUncertain=new Map();
@@ -42,7 +43,8 @@ function setAnalysisControls(){
 }
 function clearPrivateView(){
   // 退出或换角色时清掉所有业务显示与输入，不只清聊天框。
-  for(const id of ["identity","orders","order-result","conversation","conditions","facts","history","status","error","preferences-status","task-preferences","task-execution","task-memory-update","comparison"])el(id).replaceChildren();
+  for(const id of ["identity","orders","order-result","conversation","conditions","facts","history","status","error","preferences-status","task-preferences","task-execution","task-memory-update","task-policy-review","comparison"])el(id).replaceChildren();
+  policyReviewRevision+=1;
   el("message").value="";el("order").value="";el("token").value="";el("cutoff").value="2026-11-03T00:00";
   comparisonSnapshot=null;comparisonRevision+=1;comparisonBusy=false;el("compare-submit").disabled=false;
   preferences=null;preferenceBusy=false;preferenceRevision+=1;lastOrder=null;displayedTaskId=null;memoryActions.clear();memoryUncertain.clear();
@@ -163,6 +165,32 @@ function showMemoryUpdate(record,s){
 function showTaskDetails(record,s){
   if(!isCurrent(s))return;displayedTaskId=record.id;
   showConditions(record.conditions,s);showFacts(record.facts,s);showTaskPreferences(record.memory,s,record.memory_update,record.presentation);showExecution(record,s);showMemoryUpdate(record,s);
+  showPolicyReview(record,s);
+}
+async function showPolicyReview(record,s){
+  const revision=++policyReviewRevision,box=el("task-policy-review");box.replaceChildren();
+  if(!record.policy_status_check_available||!finalStates.has(record.status))return;
+  box.append(node("p","正在核对原报告所用政策的当前状态…","muted"));
+  const current=()=>isCurrent(s)&&displayedTaskId===record.id&&revision===policyReviewRevision;
+  try{
+    const review=await api(`/api/tasks/${record.id}/policy-status`,{},s);if(!current())return;
+    box.replaceChildren();
+    box.append(node("h3","原报告的依据状态"),node("p",review.message,review.status==="warning"||review.status==="unavailable"?"memory-warning":"muted"));
+    const labels={active:"仍有效",withdrawn:"已撤回",corrected:"已被更正稿替代",missing:"未找到",invalid_policy:"无法核实"};
+    for(const source of review.sources||[]){
+      box.append(node("p",`${source.document_id}：${labels[source.status]||"无法核实"}${source.reason?`；原因：${source.reason}`:""}${source.replacement_document_id?`；更正版：${source.replacement_document_id}`:""}`));
+    }
+    box.append(node("p","这项提示是在查看时重新核对的。原报告、原引用和原导出保持不变；需要当前结论时，请发起新查询。","muted"));
+    const refresh=node("button","重新核对依据","secondary");refresh.onclick=()=>showPolicyReview(record,s);
+    const download=node("button","下载原报告及当前状态","secondary");
+    download.onclick=async()=>{try{
+      const response=await fetch(`/api/tasks/${record.id}/policy-status/export`,{headers:{Authorization:`Bearer ${s.token}`,"X-Access-Mode":s.mode}});
+      if(!current())return;if(!response.ok)throw Error("依据核对附件未能下载，请重新核对。");
+      const blob=await response.blob();if(!current())return;
+      const url=URL.createObjectURL(blob),a=node("a");a.href=url;a.download=`policy-review-${record.id}.json`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+    }catch(e){error(e,s);}};
+    box.append(refresh,download);
+  }catch(e){if(current()){box.replaceChildren();box.append(node("p","暂时无法核对政策当前状态，不能认定旧依据仍有效。原报告未改动。","memory-warning"));}}
 }
 async function refreshSavedPreference(record,s){
   if(!isCurrent(s)||!["saved","unchanged"].includes(record.memory_update?.status))return;
@@ -407,7 +435,7 @@ el("execution-mode").onchange=()=>{
   if(!chatModes.has(selected)){el("execution-mode").value=executionMode;return;}
   if(selected===executionMode)return;
   executionMode=selected;session=crypto.randomUUID();currentTask=null;displayedTaskId=null;clearError();
-  for(const id of ["conversation","facts","conditions","task-preferences","task-execution","task-memory-update"])el(id).replaceChildren();
+  for(const id of ["conversation","facts","conditions","task-preferences","task-execution","task-memory-update","task-policy-review"])el(id).replaceChildren();
   el("status").textContent=`已切换为${executionLabels[executionMode]}并新建对话。旧任务保留在历史中；发送后才调用模型。`;
 };
 el("logout").onclick=()=>{beginScope("","buyer");el("login").hidden=false;el("workspace").hidden=true;};
@@ -445,7 +473,7 @@ el("cancel").onclick=async()=>{
   const s=captureScope(),id=currentTask;if(!id)return;
   try{const r=await api(`/api/tasks/${id}/cancel`,{method:"POST"},s);if(!isCurrent(s)||currentTask!==id)return;el("status").textContent=statuses[r.status]||r.status;if(!polling)await poll(id,s);}catch(e){error(e,s);}
 };
-el("new-chat").onclick=()=>{if(polling)return;if(pendingSubmission){error(Error("上次提交结果尚未确认，请先重试原问题，再新建对话。"));return;}session=crypto.randomUUID();currentTask=null;displayedTaskId=null;for(const id of ["conversation","facts","conditions","task-preferences","task-execution","task-memory-update"])el(id).replaceChildren();el("status").textContent="已新建对话；旧任务仍保存在历史记录中。";};
+el("new-chat").onclick=()=>{if(polling)return;if(pendingSubmission){error(Error("上次提交结果尚未确认，请先重试原问题，再新建对话。"));return;}session=crypto.randomUUID();currentTask=null;displayedTaskId=null;for(const id of ["conversation","facts","conditions","task-preferences","task-execution","task-memory-update","task-policy-review"])el(id).replaceChildren();el("status").textContent="已新建对话；旧任务仍保存在历史记录中。";};
 el("refresh").onclick=()=>{const s=captureScope();return history(s).catch(e=>error(e,s));};
 el("preferences-form").onsubmit=e=>{e.preventDefault();return preferenceRequest("PUT");};
 el("preferences-delete").onclick=()=>preferenceRequest("DELETE");

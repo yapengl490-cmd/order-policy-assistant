@@ -103,6 +103,11 @@ def lookup_general_policy(engine, *, store_id: str, category: str | None,
             "conflict": "适用政策存在版本冲突，当前不能给出规则结论。",
             "invalid_policy": "政策原文或来源校验失败，当前不能给出规则结论。",
         }
+        if status in {"withdrawn", "superseded_without_valid_replacement"}:
+            # 来源变更状态单列；空规则和空引用防止模型把撤回原文当现行依据。
+            return {**result, "status": status, "policy_status": status, "reason": reason,
+                    "policy_lifecycle": deepcopy(bundle.get("lifecycle", {})),
+                    "message": "该店铺、品类和时点的政策已撤回，当前没有可用更正版；暂不能提供退货条件或运费规则，不借用其他版本。"}
         return {**result, "status": status, "reason": reason,
                 "message": messages.get(status, "政策资料未完整取得，当前不能给出规则结论。")}
     document = bundle["document"]
