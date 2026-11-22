@@ -11,7 +11,7 @@ const memoryActions=new Map(),memoryUncertain=new Map();
 const preferenceLabels={amount_format:{yuan:"简明元",yuan_fixed2:"元 · 固定两位小数",fen:"整数分"},answer_style:{brief:"简洁",standard:"标准",detailed:"详细"}};
 const statuses={queued:"已受理",running:"正在查证",cancelling:"已请求取消，等待当前调用返回",cancelled:"已取消",completed:"已完成",partial:"部分完成",clarification:"需要补充条件",failed:"处理失败",limited:"达到执行上限",interrupted:"服务重启后中断"};
 const finalStates=new Set(["completed","partial","clarification","failed","limited","cancelled","interrupted"]);
-const executionLabels={single:"单智能体",multi:"双分支对照",batch_sequential:"批量普通工具调用",programmatic:"批量隔离短程序",snapshot_sql:"授权快照查询对照",period_analysis:"两期变化解释",refund_investigation:"退款原因证据核对"};
+const executionLabels={single:"单智能体",multi:"双分支对照",dependent:"售后顺序协作",batch_sequential:"批量普通工具调用",programmatic:"批量隔离短程序",snapshot_sql:"授权快照查询对照",period_analysis:"两期变化解释",refund_investigation:"退款原因证据核对"};
 const chatModes=new Set(["single","multi","batch_sequential","programmatic","snapshot_sql"]);
 class StaleScope extends Error {}
 function captureScope(){return {epoch:scopeEpoch,token,mode};}
@@ -118,13 +118,14 @@ async function preferenceRequest(method,s=captureScope(),preserveDraft=false){
     if(lastOrder)showOrder(lastOrder,s);
   }finally{if(isCurrent(s)&&requestRevision===preferenceRevision){preferenceBusy=false;setPreferenceControls();}}
 }
-function showTaskPreferences(memory,s,update){
+function showTaskPreferences(memory,s,update,presentation){
   if(!isCurrent(s))return;const box=el("task-preferences");box.replaceChildren();if(!memory)return;
   if(memory.status!=="loaded")box.append(node("p",memory.status==="not_provided"?"本次未读取已保存偏好。":"本次未取得可用的已保存偏好。","muted"));
   const applied=preferenceText(memory.effective_values);
   const overrides=Object.keys(preferenceLabels).filter(field=>memory.overrides?.[field]==="current_turn_explicit").map(field=>field==="amount_format"?"金额显示":"回答详略");
   if(!applied&&memory.status!=="loaded")return;
   box.append(node("p",`${applied?`本次回答偏好：${applied}`:"本次未应用已保存的回答偏好"}${overrides.length?`；${overrides.join("、")}按本次明确要求${update?"调整；聊天偏好是否长期保存见下方独立结果":"临时调整，未改写已保存偏好"}`:""}。`,"muted"));
+  if(presentation?.currency_policy==="preserve_source_currency_no_conversion")box.append(node("p","元/分格式仅适用于人民币；本次事实与商品保留来源币种，不按语言或偏好换汇。","muted"));
 }
 // 任务开始时的偏好快照与聊天后保存的偏好分开显示；确认只操作原任务，不重发模型请求。
 const memoryLabels={saved:"已保存聊天偏好",unchanged:"已保存偏好无需变化",proposed:"待你确认的偏好建议",rejected:"未保存偏好",conflict:"偏好已变化，未覆盖新设置",unknown:"保存结果待核对",preparing:"正在准备偏好更新",not_saved:"偏好未保存",dismissed:"已忽略偏好建议",expired:"偏好建议已过期",discarded:"本次偏好建议已作废"};
@@ -161,7 +162,7 @@ function showMemoryUpdate(record,s){
 }
 function showTaskDetails(record,s){
   if(!isCurrent(s))return;displayedTaskId=record.id;
-  showConditions(record.conditions,s);showFacts(record.facts,s);showTaskPreferences(record.memory,s,record.memory_update);showExecution(record,s);showMemoryUpdate(record,s);
+  showConditions(record.conditions,s);showFacts(record.facts,s);showTaskPreferences(record.memory,s,record.memory_update,record.presentation);showExecution(record,s);showMemoryUpdate(record,s);
 }
 async function refreshSavedPreference(record,s){
   if(!isCurrent(s)||!["saved","unchanged"].includes(record.memory_update?.status))return;
@@ -208,6 +209,11 @@ function showExecution(record,s){
   detail.append(node("p",`执行方案：${requested}${requested!==effective?`；实际使用${effective}`:""}`));
   if(plan?.requested==="multi"&&plan?.effective==="single")detail.append(node("p",plan.reason==="conditions_not_ready"?"本次查询条件尚未齐全，先按单路澄清，没有拆分调用。":"本次条件没有形成金额与政策两个独立分工，按单路处理。","muted"));
   if(record.status==="partial")detail.append(node("p","本任务只完成了部分。可用事实仍保留，未完成分支不代表无订单或零退款。","partial-notice"));
+  if(plan?.effective==="dependent"){
+    detail.append(node("p","先读取授权订单事实，冻结后交给政策角色；后一步使用本次交接内容。"));
+    if(plan.handoff?.sha256)detail.append(node("p",`事实交接指纹：${plan.handoff.sha256}`,"muted"));
+    if(plan.followup)detail.append(node("p",`证据补查：${plan.followup.attempts??0}/${plan.followup.limit??1} 次；${plan.followup.status||"未执行"}。补查不改变身份范围，也不保证取得新依据。`,"muted"));
+  }
   const validNumber=n=>typeof n==="number"&&Number.isFinite(n)&&n>=0;
   if(budget?.used&&budget?.limits){
     const counts=[["model_requests","模型请求"],["tool_calls","工具尝试"]].filter(([key])=>validNumber(budget.used[key])&&validNumber(budget.limits[key])).map(([key,label])=>`${label} ${budget.used[key]}/${budget.limits[key]}`);
@@ -220,7 +226,7 @@ function showExecution(record,s){
   if(Array.isArray(plan?.branches)&&plan.branches.length){
     const list=node("ul");
     for(const branch of plan.branches){
-      const label={amount:"金额核查",policy:"政策解释"}[branch.name]||branch.name||"分支";
+      const label={amount:"金额核查",order_facts:"订单事实",policy:"政策解释"}[branch.name]||branch.name||"分支";
       const usage=branch.usage||{},counts=[];
       if(validNumber(usage.model_requests))counts.push(`模型请求 ${usage.model_requests} 次`);
       if(validNumber(usage.tool_calls))counts.push(`工具尝试 ${usage.tool_calls} 次`);
@@ -278,7 +284,7 @@ function showOrder(r,s){
 }
 function showConditions(conditions,s){
   if(!isCurrent(s))return;const box=el("conditions");box.replaceChildren();if(!conditions)return;
-  const names={order_id:"订单编号",paid_from:"支付开始",paid_before:"支付结束",refund_before:"退款截止",policy_as_of:"政策日期",assessment_at:"售后判断时刻",is_unworn:"是否未穿过",tags_intact:"吊牌是否完好",reason:"退货原因"};
+  const names={order_id:"订单编号",paid_from:"支付开始",paid_before:"支付结束",refund_before:"退款截止",policy_as_of:"政策日期",assessment_at:"售后判断时刻",is_unworn:"是否未穿过",tags_intact:"吊牌是否完好",reason:"退货原因",category:"商品品类",currency:"币种",budget_max_minor:"单件标价上限（最小货币单位）",material:"材质",cotton_percentage:"棉含量（%）",size:"尺码",require_returnable:"要求有可退依据",policy_at:"政策查询时刻"};
   const detail=node("details");detail.append(node("summary",`查看本次条件与来源 · 版本 ${conditions.revision}`));
   for(const [field,item] of Object.entries(conditions.confirmed||{}))detail.append(node("p",`${names[field]||field}：${item.value}；来自用户原话“${item.source?.quote||""}”`));
   for(const [field,item] of Object.entries(conditions.defaults||{}))detail.append(node("p",`${names[field]||field}：${item.value}；程序默认，非用户指定`));
@@ -295,16 +301,16 @@ function showFacts(facts,s){
   if(!facts||!facts.length){box.append(node("p","本次暂无已执行工具依据。","muted"));return;}
   if(hasUnsafeInteger(facts)){box.append(node("p","本次依据含超出浏览器安全整数范围的数值，页面无法精确显示。请在历史记录中下载原始证据核对；未将舍入后的内容当作原始事实。","muted"));return;}
   facts.forEach(f=>{
-    const detail=node("details");detail.append(node("summary",f.tool==="review_after_sales"?"展开完整政策原文与核查明细":`查看查询依据：${f.tool}`));
-    if(f.tool==="review_after_sales"){
+    const detail=node("details");detail.append(node("summary",f.tool==="review_after_sales"?"展开完整政策原文与核查明细":`查看查询依据：${({lookup_general_policy:"店铺一般规则",recommend_products:"商品推荐",shopify_check_order:"平台测试订单",shopify_current_policy:"平台当前政策"}[f.tool]||f.tool)}`));
+    if(["review_after_sales","lookup_general_policy","recommend_products","shopify_check_order","shopify_current_policy"].includes(f.tool)){
       const index=f.result?.citation_index;
       if(index&&typeof index==="object"&&!Array.isArray(index))for(const [id,item] of Object.entries(index)){
         if(!item||typeof item!=="object")continue;
-        detail.append(node("strong",`[${id}]`),node("p",`来源：${item.source_path||item.document_id||"未记录"} · 第${item.line_start??"?"}–${item.line_end??"?"}行`),node("pre",typeof item.text==="string"?item.text:"原文未提供"));
+        detail.append(node("strong",`[${id}]`),node("p",`来源：${item.source_path||item.document_id||"未记录"} · ${item.pointer?`目录位置 ${item.pointer}`:`第${item.line_start??"?"}–${item.line_end??"?"}行`}`),node("pre",typeof item.text==="string"?item.text:"原文未提供"));
       }
       detail.append(node("p","原文、条件来源及工具返回随任务保存；下载证据包含完整内容，不因页面折叠删减。","muted"));
     }
-    if(f.tool==="review_after_sales"){const raw=node("details");raw.append(node("summary","完整工具数据"),node("pre",JSON.stringify(f,null,2)));detail.append(raw);}
+    if(["review_after_sales","lookup_general_policy","recommend_products","shopify_check_order","shopify_current_policy"].includes(f.tool)){const raw=node("details");raw.append(node("summary","完整工具数据"),node("pre",JSON.stringify(f,null,2)));detail.append(raw);}
     else detail.append(node("pre",JSON.stringify(f,null,2)));
     box.append(detail);
   });
@@ -353,7 +359,7 @@ async function history(s){const rows=await api("/api/tasks",{},s);renderHistory(
 async function loadScope(s){
   const [me,r,rows]=await Promise.all([api("/api/me",{},s),api("/api/orders",{},s),api("/api/tasks",{},s),preferenceRequest("GET",s)]);
   if(!isCurrent(s))return;
-  el("identity").textContent=me.role==="merchant"?`当前授权演示店铺：${me.shop_id}`:`当前测试买家：${me.buyer_id}`;
+  el("identity").textContent=me.role==="merchant"?`当前授权本地演示店铺：${me.shop_id}${me.platform_context?.shop_domain?`；另已授权Shopify开发店：${me.platform_context.shop_domain}（只读，示例：核查 Shopify #1001）`:""}`:`当前测试买家：${me.buyer_id}`;
   el("orders").textContent=r.orders.length?`当前范围订单：${r.orders.map(x=>x.order_id).join("、")}`:"当前范围没有订单";renderHistory(rows,s);
 }
 function poll(id,s){

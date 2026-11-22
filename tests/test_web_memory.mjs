@@ -183,3 +183,11 @@ test("未读取偏好的任务如有本次要求，单独显示临时选择且�
   const h=harness();h.rows=[{id:"no-read",status:"completed",message:"问题",answer:"答复",facts:[],memory:{status:"not_provided",stored_values:{},effective_values:{answer_style:"detailed"},overrides:{answer_style:"current_turn_explicit"},version:null}}];
   await h.login();h.el("history").children[0].children[1].onclick();assert.match(h.el("task-preferences").textContent,/未读取.*详细.*本次明确要求临时调整/);assert.doesNotMatch(h.el("task-preferences").textContent,/已保存偏好，|保存成功/);
 });
+
+test("购物任务偏好注明原币保留，元分偏好不能暗示美元已换汇",async()=>{
+  const h=harness();h.rows=[{id:"native-usd",status:"completed",message:"核查Shopify #1002",answer:"净额70.00 USD",facts:[],memory:{status:"loaded",stored_values:{amount_format:"yuan",answer_style:"brief"},effective_values:{amount_format:"yuan",answer_style:"detailed"},overrides:{answer_style:"current_turn_explicit"},version:3},presentation:{currency_policy:"preserve_source_currency_no_conversion"}}];
+  await h.login();h.el("history").children[0].children[1].onclick();
+  assert.match(h.el("task-preferences").textContent,/详细.*按本次明确要求/);
+  assert.match(h.el("task-preferences").textContent,/元\/分格式仅适用于人民币.*保留来源币种.*不按语言或偏好换汇/);
+  assert.equal(h.prefRequests().filter(r=>r.method!=="GET").length,0);
+});

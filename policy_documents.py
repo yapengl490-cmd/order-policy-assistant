@@ -11,10 +11,12 @@ import json
 from pathlib import Path
 import re
 
+MAX_RETURN_WINDOW_HOURS = 8760
 MAX_FILE_BYTES = 65536
 MAX_CHUNK_CHARS = 3000
 MAX_CHUNK_BYTES = 8000
 CATEGORY = "ordinary_shoes"
+CATEGORY_LABELS = {CATEGORY: "普通鞋类", "t_shirt": "T恤"}
 HEADINGS = {"scope": "适用范围", "return_eligibility": "退货资格", "shipping_cost": "退货运费"}
 IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}")
 
@@ -63,8 +65,9 @@ def parse_policy_text(source_text: str, *, source_path="controlled-memory.md") -
         raise PolicyDocumentError("元数据字段必须完整且不能另存规则或额外指令")
     if any(not isinstance(meta[key], str) or not IDENTIFIER.fullmatch(meta[key]) for key in ("document_id", "store_id", "version")):
         raise PolicyDocumentError("政策标识/店铺/版本格式无效")
-    if meta["category"] != CATEGORY or meta["source_kind"] != "synthetic_demo":
-        raise PolicyDocumentError("本版仅支持明确合成的普通鞋类政策")
+    if (not isinstance(meta["category"], str) or meta["category"] not in CATEGORY_LABELS
+            or meta["source_kind"] != "synthetic_demo"):
+        raise PolicyDocumentError("本版仅支持明确合成的普通鞋类或T恤受控政策")
     if not isinstance(meta["title"], str) or not 1 <= len(meta["title"]) <= 100 or "\n" in meta["title"]:
         raise PolicyDocumentError("标题无效")
     start, end = aware_time(meta["effective_from"], "effective_from"), aware_time(meta["effective_before"], "effective_before")
@@ -89,7 +92,7 @@ def parse_policy_text(source_text: str, *, source_path="controlled-memory.md") -
     if set(groups) != set(HEADINGS):
         raise PolicyDocumentError("必须同时保留适用范围、退货条件与运费条款")
     scope = [text for _, text in groups["scope"]][1:]
-    expected_scope = [f"适用店铺：{meta['store_id']}。", "适用品类：普通鞋类（ordinary_shoes）。",
+    expected_scope = [f"适用店铺：{meta['store_id']}。", f"适用品类：{CATEGORY_LABELS[meta['category']]}（{meta['category']}）。",
         "版本选择：按订单支付时刻匹配，适用区间左含右不含。",
         "资料性质：助手编写的合成演示，不是法律意见或任何真实商家、平台的售后规则。"]
     if scope != expected_scope:
@@ -98,7 +101,7 @@ def parse_policy_text(source_text: str, *, source_path="controlled-memory.md") -
     if len(eligibility) != 4:
         raise PolicyDocumentError("退货条款必须完整保留时限、条件、例外与核验要求")
     window = re.fullmatch(r"退货申请时限：自订单收货时刻起([1-9]\d{0,3})小时内，包含收货时刻，不包含满\1小时的截止时刻；早于收货时刻的申请无效。", eligibility[0])
-    if not window or not 1 <= int(window[1]) <= 8760:
+    if not window or not 1 <= int(window[1]) <= MAX_RETURN_WINDOW_HOURS:
         raise PolicyDocumentError("退货小时数/边界不明确或超受控范围")
     required_return = ["必要条件：商品未穿着且吊牌完好。", "例外：定制商品不适用本条退货资格。",
         "事实核验：买家对未穿着、吊牌完好或定制状态的自述均未核实，不能视为正式售后批准。"]
@@ -120,7 +123,7 @@ def parse_policy_text(source_text: str, *, source_path="controlled-memory.md") -
         chunks.append({"chunk_id": meta["document_id"] + ":" + section, "section": section,
             "line_start": first, "line_end": last, "text": text, "checksum": _hash(text)})
     rules = {"return_window_hours": int(window[1]), "return_window_basis": "delivered_at",
-        "return_window_boundary": "start_inclusive_end_exclusive", "allowed_categories": [CATEGORY], "custom_excluded": True,
+        "return_window_boundary": "start_inclusive_end_exclusive", "allowed_categories": [meta["category"]], "custom_excluded": True,
         "requires_unworn": True, "requires_tags": True, "self_report_verified": False,
         "shipping_by_reason": {"size": "buyer", "preference": "buyer", "merchant_responsibility": "verified_record_required"}}
     citation_sections = {key: "return_eligibility" for key in rules}
@@ -130,7 +133,7 @@ def parse_policy_text(source_text: str, *, source_path="controlled-memory.md") -
         chunk = next(c for c in chunks if c["section"] == section)
         citations[key] = {**chunk, "citation_id": chunk["chunk_id"], "document_id": meta["document_id"],
             "document_checksum": checksum, "version": meta["version"], "store_id": meta["store_id"],
-            "category": CATEGORY, "source_kind": "synthetic_demo", "source_path": str(source_path)}
+            "category": meta["category"], "source_kind": "synthetic_demo", "source_path": str(source_path)}
     return {**meta, "effective_from": start.isoformat(), "effective_before": end.isoformat(),
             "checksum": checksum, "source_path": str(source_path), "source_text": source_text,
             "chunks": chunks, "rules": rules, "rule_citations": citations}

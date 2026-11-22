@@ -7,3 +7,6 @@ services:
       DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?Set a private key before explicitly enabling paid calls}
       MODEL_NAME: ${MODEL_NAME:-deepseek-flash}
       MAX_DAILY_TASKS: ${MAX_DAILY_TASKS:-10}
+      # 只打开已随免费初始化导入的合成目录；不是实时平台商品。
+      CATALOG_DEMO_ENABLED: ${CATALOG_DEMO_ENABLED:-0}
+      CATALOG_POLICY_DEMO_ENABLED: ${CATALOG_POLICY_DEMO_ENABLED:-0}

@@ -188,7 +188,10 @@ class ConditionStateTests(unittest.TestCase):
     def test_policy_explicit_date_and_switch_from_order(self):
         state = self.state("查询2030-01-01的退款政策")
         self.assertTrue(state["ready"], state)
-        self.assertEqual(validate_tool_arguments("search_policies", {"query": "退款", "as_of": "2030-01-01"}, state)["as_of"], "2030-01-01")
+        self.assertEqual(state["kind"], "general_policy")
+        self.assertEqual(state["allowed_tools"], ["lookup_general_policy"])
+        self.assertEqual(state["confirmed"]["policy_at"]["value"], "2030-01-01T00:00:00+08:00")
+        self.assertNotIn("order_id", state["missing"])
         old = self.state("查O001")
         policy = self.state("解释退款截止政策", old, turn="t2")
         self.assertEqual(policy["kind"], "policy")

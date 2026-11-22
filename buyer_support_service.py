@@ -11,6 +11,7 @@ from sqlalchemy import Boolean, Column, DateTime, MetaData, Table, Text, inspect
 from merchant_service import order_shops
 from models import Order
 from refund_service import _identifier, _time
+from policy_documents import MAX_RETURN_WINDOW_HOURS
 
 support_metadata = MetaData(schema="public")
 order_support_facts = Table("order_support_facts", support_metadata,
@@ -137,7 +138,7 @@ def evaluate_buyer_support(context: dict, policy_bundle: dict, *, claims=None, n
         valid = False
     rules = policy_bundle.get("rules", {})
     hours = rules.get("return_window_hours")
-    if (not valid or type(hours) is not int or not 1 <= hours <= 24*90
+    if (not valid or type(hours) is not int or not 1 <= hours <= MAX_RETURN_WINDOW_HOURS
             or rules.get("return_window_basis") != "delivered_at"
             or rules.get("return_window_boundary") != "start_inclusive_end_exclusive"
             or not isinstance(rules.get("allowed_categories"), list)

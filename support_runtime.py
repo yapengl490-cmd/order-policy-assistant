@@ -7,12 +7,21 @@ from zoneinfo import ZoneInfo
 
 
 def review_after_sales(engine, order_id, *, buyer_id=None, shop_id=None, state, should_cancel=lambda:False):
-    from buyer_support_service import get_support_context, evaluate_buyer_support
+    from buyer_support_service import get_support_context
+    if should_cancel():
+        raise InterruptedError('cancelled_before_support')
+    context = get_support_context(engine, order_id, buyer_id=buyer_id, shop_id=shop_id)
+    return review_support_context(engine, context, state=state, should_cancel=should_cancel)
+
+
+def review_support_context(engine, context, *, state, should_cancel=lambda:False, keyword_only=False):
+    """接收程序已授权并冻结的订单事实；协作路径不重新读取或让模型改归属。"""
+    from buyer_support_service import evaluate_buyer_support
     from policy_kb import select_policy, search_policy_chunks
     from embedding_client import EmbeddingClient, EmbeddingSettings
     if should_cancel():
         raise InterruptedError('cancelled_before_support')
-    context = get_support_context(engine, order_id, buyer_id=buyer_id, shop_id=shop_id)
+    context = deepcopy(context)
     claims = {key:item['value'] for key,item in state.get('claims',{}).items()}
     now = datetime.fromisoformat((state['confirmed'].get('assessment_at') or state['defaults']['assessment_at'])['value'])
     policy = {'status':'insufficient_evidence'}
@@ -26,7 +35,7 @@ def review_after_sales(engine, order_id, *, buyer_id=None, shop_id=None, state, 
                 raise InterruptedError('cancelled_before_retrieval')
             # 配置决定是否启用真实嵌入；未配置时明确关键词基线，不伪装向量结果。
             config = EmbeddingSettings.load(root=Path(__file__).resolve().parent)
-            use_embedding = bool(getattr(config, 'api_key', ''))
+            use_embedding = not keyword_only and bool(getattr(config, 'api_key', ''))
             embedder = EmbeddingClient(config) if use_embedding else None
             retrieval = search_policy_chunks(engine, state['original_question'][:1000], **scope,
                          mode='hybrid' if use_embedding else 'keyword', embedder=embedder, limit=4)
@@ -43,7 +52,9 @@ def review_after_sales(engine, order_id, *, buyer_id=None, shop_id=None, state, 
         result['applicable_rules'] = deepcopy(policy.get('rules', {}))
     result['retrieval'] = retrieval
     result['rule_evidence_mode'] = 'mandatory_clauses_plus_retrieved_context'
-    result['buyer_id' if buyer_id is not None else 'shop_id'] = buyer_id if buyer_id is not None else shop_id
+    scope = context.get('scope', {})
+    scope_key = 'buyer_id' if scope.get('role') == 'buyer' else 'shop_id'
+    result[scope_key] = scope.get(scope_key)
     result['decision'] = expected_decision(result)
     result['citation_index'] = citation_index(result)
     required_sections = set()

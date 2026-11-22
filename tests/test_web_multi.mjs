@@ -43,7 +43,7 @@ function harness(){
 }
 
 test('页面提供两方案与整条共享额度说明，默认单路，选择不会自动调用模型',async()=>{
-  assert.match(markup,/id="execution-mode"/);assert.match(markup,/单智能体（默认）/);assert.match(markup,/双分支对照（金额＋政策）/);assert.match(markup,/整条任务共享/);
+  assert.match(markup,/id="execution-mode"/);assert.match(markup,/单智能体（默认）/);assert.match(markup,/多角色对照（售后顺序／金额政策并行）/);assert.match(markup,/整条任务共享/);
   const h=harness();await h.login();assert.equal(h.el('execution-mode').value,'single');h.change('multi');assert.equal(h.posts().length,0);
   assert.match(h.el('status').textContent,/新建对话.*发送后才调用模型/);
 });
@@ -158,4 +158,11 @@ test('比较失败只显示错误，不保留部分总额；退出后旧失败�
   const old=h.el('compare-form').onsubmit(event);await flush();h.el('logout').onclick();await h.login('other-token');
   pending.resolve(reply({detail:'旧买家请求错误'},422));await old;
   assert.equal(h.el('comparison').textContent,'');assert.equal(h.el('error').textContent,'');assert.equal(h.el('compare-submit').disabled,false);
+});
+
+// 新顺序模式必须展示已保存交接，不由页面当前选择伪造。
+test('售后顺序协作展示事实交接与有界补查，保留原并行历史',async()=>{
+  const h=harness();h.rows=[row('dependent',{status:'completed',orchestration:{requested:'multi',effective:'dependent',handoff:{sha256:'abc-frozen-evidence'},followup:{attempts:1,limit:1,status:'completed'},branches:[{name:'order_facts',status:'completed',usage:{model_requests:1,tool_calls:1}},{name:'policy',status:'completed',usage:{model_requests:3,tool_calls:2}}]}})];
+  await h.login();h.el('history').children[0].children[1].onclick();
+  const text=h.el('task-execution').textContent;assert.match(text,/售后顺序协作/);assert.match(text,/abc-frozen-evidence/);assert.match(text,/证据补查：1\/1 次/);assert.match(text,/订单事实：已完成/);assert.equal(h.posts().length,0);
 });

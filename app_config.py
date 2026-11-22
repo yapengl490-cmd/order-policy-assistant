@@ -31,6 +31,10 @@ class AppSettings:
     # 独立协议服务；普通工具隔离测试默认关闭，正式入口load时按本机配置启用。
     mcp_enabled: bool = False
     memory_enabled: bool = False
+    # 合成目录只在明确启用后演示，默认不把旧快照当实时商品。
+    catalog_demo_enabled: bool = False
+    catalog_policy_demo_enabled: bool = False
+    demo_policy_store_id: str = "S001"
 
     @classmethod
     def load(cls):
@@ -57,6 +61,8 @@ class AppSettings:
             model_enabled=config.get("MODEL_ENABLED", "0") == "1",
             mcp_enabled=config.get("MCP_ENABLED", "1") == "1",
             memory_enabled=config.get("MEMORY_ENABLED", "0") == "1",
+            catalog_demo_enabled=config.get("CATALOG_DEMO_ENABLED", "0") == "1",
+            catalog_policy_demo_enabled=config.get("CATALOG_POLICY_DEMO_ENABLED", "0") == "1",
         )
 
 

@@ -10,37 +10,119 @@ from support_runtime import expected_decision, validate_support_answer
 class SupportRuntimeTests(unittest.TestCase):
     def fact(self,status='ok'):
         return {'status':status,'order_id':'O_SUPPORT_OK','buyer_id':'B001','eligibility':'eligible_with_self_report',
-            'shipping':{'payer':'buyer'},'policy_version':'v2','message':'演示','citations':{},
+            'shipping':{'payer':'buyer','status':'conditional_on_self_report','reason':'size'},'policy_version':'v2','message':'演示','citations':{},
             'requested_topics':['eligibility','shipping'],
-            'applicable_rules':{'return_window_hours':336,'requires_unworn':True,'requires_tags':True,'custom_excluded':True},
-            'citation_index':{'DOC:2':{'chunk_id':'DOC:2','text':'未穿且吊牌完整；定制除外。','line_start':4,'line_end':6}}}
+            'applicable_rules':{'return_window_hours':336,'requires_unworn':True,'requires_tags':True,'custom_excluded':True,
+                                'shipping_by_reason':{'size':'buyer','preference':'buyer','merchant_responsibility':'verified_record_required'}},
+            'citation_index':{
+                'DOC:2':{'chunk_id':'DOC:2','section':'return_eligibility','supports':['return_window_hours','requires_unworn','requires_tags','custom_excluded'],
+                         'text':'未穿且吊牌完整；定制除外。','line_start':4,'line_end':6},
+                'DOC:3':{'chunk_id':'DOC:3','section':'shipping_cost','supports':['shipping_by_reason'],
+                         'text':'尺码原因买家承担；商家责任需核实。','line_start':8,'line_end':9}}}
     def cfg(self):
         return SimpleNamespace(model_api_key='sk-offline-testing',model_base_url='https://api.deepseek.com',model_name='deepseek-flash',
             max_model_calls=4,max_tool_calls=6,model_timeout_seconds=30,max_output_tokens=1200)
-    def execute(self, fact=None, body=None, calls=True):
-        fact=fact or self.fact(); body=body or {'status':'completed','answer':'依订单记录和未核实自述，暂满足演示条件。','decision':expected_decision(fact),'citation_ids':['DOC:2']}
+    def claim_body(self, fact):
+        from support_claims import build_support_claim_catalog
+        catalog=build_support_claim_catalog(fact)
+        return {'schema_version':2,'status':'clarification' if fact['status']=='clarification' else 'completed',
+                'decision':expected_decision(fact),
+                'claims':[{'id':key,'citation_ids':item['citation_ids']} for key,item in catalog.items() if item['required']]}
+    def execute(self, fact=None, body=None, calls=True, repair_body=None, config=None):
+        fact=fact or self.fact()
+        if body is None:
+            body=self.claim_body(fact)
         replies=[]
         if calls:replies.append({'choices':[{'finish_reason':'tool_calls','message':{'role':'assistant','content':None,'tool_calls':[{
             'id':'a','type':'function','function':{'name':'review_after_sales','arguments':'{"order_id":"O_SUPPORT_OK"}'}}]}}]})
         replies.append({'choices':[{'finish_reason':'stop','message':{'role':'assistant','content':json.dumps(body,ensure_ascii=False)}}]})
+        # 错误输出按同内容再回应一次，核对限次修正仍失败的显式降级。
+        replies.append({'choices':[{'finish_reason':'stop','message':{'role':'assistant','content':json.dumps(repair_body if repair_body is not None else body,ensure_ascii=False)}}]})
         requests=[]
         def send(req):
             requests.append(json.loads(req.content));return httpx.Response(200,json=replies.pop(0))
         state=reconcile_conditions('O_SUPPORT_OK退货运费谁承担？没穿，吊牌完好，尺码太小',None,datetime(2026,11,18,tzinfo=timezone.utc),'t')
-        result=run_agent(self.cfg(),None,state['original_question'],'B001',[],lambda:False,
+        result=run_agent(config or self.cfg(),None,state['original_question'],'B001',[],lambda:False,
               condition_state=state,transport=httpx.MockTransport(send),tool_handlers={'review_after_sales':lambda **kwargs:fact})
         return result,requests
+
+    def test_citation_feedback_repairs_once_without_requerying_tool(self):
+        fact=self.fact();good=self.claim_body(fact);bad=json.loads(json.dumps(good))
+        shipping=next(x for x in bad['claims'] if x['id']=='shipping')
+        shipping['citation_ids']=['DOC:2']
+        got,requests=self.execute(fact,bad,repair_body=good)
+        self.assertTrue(got['support_validation']['passed'])
+        self.assertEqual(got['support_validation']['repair_count'],1)
+        self.assertEqual(got['usage']['model_requests'],3)
+        self.assertEqual(got['usage']['tool_calls'],1)
+        feedback=json.loads(requests[-1]['messages'][-1]['content'])
+        self.assertTrue(any('shipping' in x for x in feedback['errors']))
+        self.assertNotIn('tools',requests[-1])
+        self.assertNotIn('tool_choice',requests[-1])
+        self.assertIn('[DOC:3]',got['answer'])
+        self.assertEqual(len(got['support_validation']['attempts']),2)
+        self.assertNotEqual(got['trace'][2]['response'],got['trace'][3]['response'])
+
+    def test_repair_failure_stops_after_one_and_keeps_original_output(self):
+        fact=self.fact();bad=self.claim_body(fact);bad['claims'].append({'id':'refund_approved','citation_ids':[]})
+        got,requests=self.execute(fact,bad)
+        self.assertFalse(got['support_validation']['passed'])
+        self.assertEqual(got['support_validation']['repair_count'],1)
+        self.assertEqual(len(requests),3)
+        self.assertIn('refund_approved',json.dumps(got['trace']))
+        self.assertNotIn('refund_approved',got['answer'])
+        self.assertIn('程序依据事实',got['answer'])
+
+    def test_no_new_quota_for_repair(self):
+        cfg=self.cfg();cfg.max_model_calls=2
+        fact=self.fact();bad=self.claim_body(fact);bad['claims']=[]
+        got,requests=self.execute(fact,bad,config=cfg)
+        self.assertEqual(len(requests),2)
+        self.assertEqual(got['budget']['used']['model_requests'],2)
+        self.assertFalse(got['support_validation']['repair_attempted'])
+        self.assertIn('repair_budget_unavailable',got['support_validation']['errors'])
+
+    def test_wrong_legacy_free_answer_cannot_bypass_claim_contract(self):
+        fact=self.fact();legacy=self.body(fact,'运费按尺码由买家承担。')
+        legacy['citation_ids']=['DOC:2']
+        got,_=self.execute(fact,legacy,repair_body=self.claim_body(fact))
+        self.assertTrue(got['support_validation']['passed'])
+        self.assertTrue(got['support_validation']['attempts'][0]['errors'])
+        self.assertIn('[DOC:3]',got['answer'])
     def test_model_tool_loop_brief_answer_and_full_sources_preserved(self):
         result,requests=self.execute()
         self.assertEqual(result['status'],'completed');self.assertTrue(result['support_validation']['passed'])
-        self.assertIn('[DOC:2]',result['answer']);self.assertIn('定制商品除外',result['answer'])
+        self.assertIn('[DOC:2]',result['answer']);self.assertIn('定制商品不适用该退货条款',result['answer'])
         self.assertNotIn('第4–6行',result['answer']);self.assertNotIn('程序核查结论',result['answer'])
         self.assertEqual(result['facts'][0]['result']['citation_index']['DOC:2']['text'],'未穿且吊牌完整；定制除外。')
         self.assertEqual([e['id'] for e in result['skills']],['buyer_support'])
         self.assertIn('买家订单与适用政策核对',requests[0]['messages'][0]['content'])
+        self.assertNotIn('政策必须search_policies',requests[0]['messages'][0]['content'])
         self.assertNotIn('# 只读订单金额核查',requests[0]['messages'][0]['content'])
         self.assertEqual([x['function']['name'] for x in requests[0]['tools']],['review_after_sales'])
         tool=json.loads(requests[1]['messages'][-1]['content']);self.assertNotIn('buyer_id',tool)
+    def test_model_view_compacts_sources_but_saved_facts_and_contract_stay_complete(self):
+        from copy import deepcopy
+        fact=self.fact()
+        fact['citations']={rule:{k:v for k,v in source.items() if k!='supports'}
+                           for ref, source in fact['citation_index'].items()
+                           for rule in source['supports']}
+        # 真实索引携带自己的chunk_id；规则引用与索引严格对应。
+        for ref,source in fact['citation_index'].items():
+            source['chunk_id']=ref
+            for rule in source['supports']:
+                fact['citations'][rule]['chunk_id']=ref
+        before=deepcopy(fact)
+        got,requests=self.execute(fact)
+        view=json.loads(requests[1]['messages'][-1]['content'])
+        self.assertTrue(got['support_validation']['passed'])
+        self.assertEqual(view['citations']['shipping_by_reason'],{'citation_id':'DOC:3'})
+        self.assertEqual(view['citation_index'],before['citation_index'])
+        self.assertEqual(got['facts'][0]['result']['citations'],before['citations'])
+        self.assertEqual(next(x for x in got['trace'] if x['stage']=='tool')['result']['citations'],before['citations'])
+        self.assertEqual(view['answer_contract']['claims']['shipping']['citation_ids'],['DOC:3'])
+        self.assertEqual(fact,before)
+
     def test_wrong_reference_preserves_raw_and_falls_back(self):
         fact=self.fact();body={'status':'completed','answer':'错误引用示例','decision':expected_decision(fact),'citation_ids':['OTHER:1']}
         result,_=self.execute(fact,body)
@@ -221,7 +303,7 @@ class SupportRuntimeTests(unittest.TestCase):
         fact=self.fact('clarification');fact.update(eligibility='undetermined',missing=['delivered_at'])
         fact['shipping']={'payer':None,'status':'needs_verified_responsibility'}
         got,_=self.execute(fact,self.body(fact,'尚不能确定退货资格，请先核查后台。'))
-        for phrase in ('336小时','截止时刻不含','未穿着','吊牌完好','定制商品除外','后台收货时间','运费承担未确定','自述未核实'):
+        for phrase in ('336小时','不含截止时刻','未穿着','吊牌完好','定制商品不适用该退货条款','收货时间（订单记录）','运费承担尚不能确定','不能仅凭自述判定'):
             self.assertIn(phrase,got['answer'])
         self.assertEqual(got['facts'][0]['result'],{k:v for k,v in fact.items() if k!='buyer_id'})
 
@@ -229,7 +311,7 @@ class SupportRuntimeTests(unittest.TestCase):
         fact=self.fact();answer='已经批准退货'
         got,_=self.execute(fact,self.body(fact,answer))
         self.assertIn('程序依据事实',got['answer'])
-        self.assertEqual(got['answer'].count('政策v2'),1)
+        self.assertEqual(got['answer'].count('适用版本v2'),1)
         self.assertNotIn('政策原文依据',got['answer'])
         self.assertIn(answer,json.dumps(got['trace'],ensure_ascii=False))
 

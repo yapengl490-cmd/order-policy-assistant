@@ -22,7 +22,8 @@ def seed_demo_data():
         import_payload(engine, json.loads((ROOT/'samples/support/business.json').read_text()))
         import_support_payload(engine, json.loads((ROOT/'samples/support/support_facts.json').read_text()),
                                allowed_shop_id='S001')
-        import_policy_files(engine, [ROOT/'knowledge/2026-10-shoes.md', ROOT/'knowledge/2026-11-shoes.md'])
+        import_policy_files(engine, [ROOT/'knowledge/2026-10-shoes.md', ROOT/'knowledge/2026-11-shoes.md',
+                                     ROOT/'knowledge/2026-11-catalog-tshirts.md'])
     finally:
         engine.dispose()
 

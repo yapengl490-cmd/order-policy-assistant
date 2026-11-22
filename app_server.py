@@ -82,9 +82,11 @@ def public_record(record: dict) -> dict:
         "answer_semantics_verified": result.get("answer_semantics_verified", False),
         "conditions": public_condition_state(result["condition_state"]) if result.get("condition_state") else None,
         "memory": result.get("memory"),
+        "presentation": result.get("presentation"),
         "memory_update": public_memory_update(result),
         "execution_mode": record.get("execution_mode", "single"),
         "support_validation": result.get("support_validation"),
+        "shopping_validation": result.get("shopping_validation"),
         "orchestration": result.get("orchestration"),
         "budget": result.get("budget"),
         "program_executions": result.get("program_executions"),
@@ -94,7 +96,7 @@ def public_record(record: dict) -> dict:
         "analysis_evidence": result.get("analysis_evidence"),
         "fixed_answer": result.get("fixed_answer"),
         "answer_quality": result.get("answer_quality"),
-    }
+    } | {k: result[k] for k in ("support_contract_version", "support_claims") if k in result}
 
 
 def create_app(settings=None, engine=None, agent=run_agent, preference_engine=None,
@@ -277,11 +279,16 @@ def create_app(settings=None, engine=None, agent=run_agent, preference_engine=No
                 historical_evidence = []
             # 在外部请求前落盘；失败/重启也保留真实条件，不从模型解释重建。
             store.update(task_id, buyer, result={"condition_state": state})
+            # 平台店铺绑定只来自已认证账号文件，客户端和模型不能提交这个字段。
+            if state and state.get("kind") in {"shopify_order", "shopify_policy"}:
+                kwargs["platform_context"] = access.get("platform_context")
             kwargs["condition_state"] = state
             kwargs["historical_evidence"] = historical_evidence
             if record.get("preference_snapshot") is not None:
                 kwargs["preference_snapshot"] = record["preference_snapshot"]
-            support_fallback = bool(state and state.get("kind") == "support" and mode != "single")
+            # 售后多角色先查事实再交政策；其余新业务仍使用各自单路，旧金额/政策并行保留。
+            support_fallback = bool(state and state.get("kind") in {"support", "catalog", "general_policy", "shopify_order", "shopify_policy"}
+                                    and mode != "single" and not (state.get("kind") == "support" and mode == "multi"))
             if support_fallback:
                 runner = agent
             elif mode == "period_analysis":
@@ -304,7 +311,7 @@ def create_app(settings=None, engine=None, agent=run_agent, preference_engine=No
                            history, cancelled, **kwargs)
             if mode == "single" or support_fallback:
                 result["orchestration"] = {"requested": mode, "effective": "single",
-                    "reason": "售后核对沿同一授权订单和政策执行，不拆成旧金额/政策分支" if support_fallback else None,
+                    "reason": ("本次导购/店铺规则查询使用各自受限工具，不拆成旧金额/政策分支" if state.get("kind") in {"catalog", "general_policy", "shopify_order", "shopify_policy"} else "售后核对沿同一授权订单和政策执行，不拆成旧金额/政策分支") if support_fallback else None,
                     "wall_seconds": round(time.monotonic() - started, 6), "branches": []}
             result.setdefault("condition_state", state)
             with store.lock:

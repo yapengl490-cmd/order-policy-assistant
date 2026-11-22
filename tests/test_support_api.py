@@ -40,8 +40,12 @@ class SupportAPITests(unittest.TestCase):
             exported=c.get('/api/tasks/'+second['id']+'/export',headers=self.headers).json()
             self.assertEqual(exported['result']['condition_state']['claims']['is_unworn']['value'],True)
             self.assertEqual(c.get('/api/tasks/'+second['id'],headers={'Authorization':'Bearer fake-two'}).status_code,404)
-    def test_multi_selection_explicitly_records_same_order_single_execution(self):
-        def forbidden(*args,**kwargs):self.fail('old multi branches must not split new support business')
-        with TestClient(create_app(self.cfg,self.engine,agent=self.runner,multi_agent=forbidden)) as c:
+    def test_multi_selection_reaches_support_coordinator_without_single_fallback(self):
+        def coordinator(*args,**kwargs):
+            result=self.runner(*args,**kwargs)
+            result['orchestration']={'requested':'multi','effective':'dependent','branches':[]}
+            return result
+        def forbidden(*args,**kwargs):self.fail('support multi must reach the dependency coordinator')
+        with TestClient(create_app(self.cfg,self.engine,agent=forbidden,multi_agent=coordinator)) as c:
             task=self.ask(c,'O_SUPPORT_OK能退货吗','request-003',mode='multi')
-            self.assertEqual(task['orchestration']['requested'],'multi');self.assertEqual(task['orchestration']['effective'],'single')
+            self.assertEqual(task['orchestration']['requested'],'multi');self.assertEqual(task['orchestration']['effective'],'dependent')

@@ -1,13 +1,15 @@
 """评判器离线单元测试：人工假记录，仅验证判分机制，绝非真实模型验收。"""
 from copy import deepcopy
+import hashlib
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
 from unittest.mock import MagicMock, patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from holdout_evaluation import (DIMENSIONS, _amounts, _subset, aggregate_runs,
+from holdout_evaluation import (ROOT, DIMENSIONS, _amounts, _subset, aggregate_runs,
     apply_manual_review, evaluate_record, load_suite, public_runs, record_sha256,
     verify_commitment, preflight_suite, _preflight_data_fingerprint)
 
@@ -32,11 +34,46 @@ def sample():
 
 
 class HoldoutEvaluationTests(unittest.TestCase):
+    def historical_source_root(self):
+        """仅为历史单元检查重建冻结来源；不替换当次评测的默认源码根。"""
+        directory = tempfile.TemporaryDirectory()
+        self.addCleanup(directory.cleanup)
+        root = Path(directory.name)
+        archive = Path(__file__).resolve().parents[1] / "evaluation/archive/20261118"
+        for item in load_suite()["source_fingerprints"]:
+            source = (archive if item["path"] == "policies.json" else ROOT) / item["path"]
+            target = root / item["path"]
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(source.read_bytes())
+        return root
+
     def test_frozen_manifest_and_sources_match(self):
-        self.assertEqual(verify_commitment()["status"], "passed")
+        # 原题面、预期与commitment不改；归档仅补回已修订的旧政策原字节。
+        self.assertEqual(verify_commitment(source_root=self.historical_source_root())["status"], "passed")
         suite = load_suite()
         self.assertEqual(len(suite["cases"]), 6)
         self.assertEqual(len(public_runs(suite)), 12)
+
+    def test_historical_source_tampering_still_fails_commitment(self):
+        root = self.historical_source_root()
+        self.assertEqual(verify_commitment(source_root=root)["status"], "passed")
+        policy = root / "policies.json"
+        policy.write_bytes(policy.read_bytes() + b"\n")
+        result = verify_commitment(source_root=root)
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["errors"], ["冻结依据已变化：policies.json"])
+
+    def test_current_sources_do_not_pass_the_historical_freeze(self):
+        expected = []
+        for item in load_suite()["source_fingerprints"]:
+            source = ROOT / item["path"]
+            if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != item["sha256"]:
+                expected.append("冻结依据已变化：" + item["path"])
+        self.assertIn("冻结依据已变化：policies.json", expected)
+        # 默认入口继续核对当前源码，不能借归档把新版本伪装成旧冻结通过。
+        result = verify_commitment()
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["errors"], expected)
 
     def test_public_input_excludes_private_fields_and_does_not_mutate_suite(self):
         suite = {"cases": [sample()[0]]}

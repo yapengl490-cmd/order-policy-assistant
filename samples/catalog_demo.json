@@ -1,0 +1,413 @@
+{
+  "schema_version": 1,
+  "data_kind": "synthetic_demo",
+  "notice": "全部商品、价格、SKU及库存均为助手编写的合成测试样例，不是Shopify返回，也不对应真实在售商品。",
+  "snapshot_at": "2026-11-20T04:00:00+00:00",
+  "products": [
+    {
+      "product_id": "DEMO-TEE-A",
+      "shop_id": "DEMO-SHOP-A",
+      "title": "合成演示基础T恤",
+      "category": "t_shirt",
+      "variants": [
+        {
+          "variant_id": "V-A",
+          "sku": "DEMO-V-A",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2500,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-B",
+          "sku": "DEMO-V-B",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2900,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-BOUNDARY",
+          "sku": "DEMO-V-BOUNDARY",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 3000,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-OVER",
+          "sku": "DEMO-V-OVER",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 3001,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-SOLDOUT",
+          "sku": "DEMO-V-SOLDOUT",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2000,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 0
+          }
+        },
+        {
+          "variant_id": "V-POLY",
+          "sku": "DEMO-V-POLY",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2000,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "polyester",
+            "size": "M"
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-MATERIAL-UNKNOWN",
+          "sku": "DEMO-V-MATERIAL-UNKNOWN",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2400,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": null,
+            "size": "M"
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-INVENTORY-UNKNOWN",
+          "sku": "DEMO-V-INVENTORY-UNKNOWN",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2400,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": null
+          }
+        },
+        {
+          "variant_id": "V-OTHER-CURRENCY",
+          "sku": "DEMO-V-OTHER-CURRENCY",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2000,
+            "currency": "CNY",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-NOT-PUBLISHED",
+          "sku": "DEMO-V-NOT-PUBLISHED",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2000,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": false
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-OTHER-MARKET",
+          "sku": "DEMO-V-OTHER-MARKET",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2000,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "CN",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        }
+      ]
+    },
+    {
+      "product_id": "DEMO-TEE-SPLIT",
+      "shop_id": "DEMO-SHOP-A",
+      "title": "合成演示跨变体陷阱：低价S码与超预算M码",
+      "category": "t_shirt",
+      "variants": [
+        {
+          "variant_id": "V-SPLIT-S",
+          "sku": "DEMO-V-SPLIT-S",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 1800,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "S",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        },
+        {
+          "variant_id": "V-SPLIT-M",
+          "sku": "DEMO-V-SPLIT-M",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 3500,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        }
+      ]
+    },
+    {
+      "product_id": "DEMO-TEE-PRIVATE",
+      "shop_id": "DEMO-SHOP-B",
+      "title": "合成演示其他店铺商品",
+      "category": "t_shirt",
+      "variants": [
+        {
+          "variant_id": "V-OTHER-SHOP",
+          "sku": "DEMO-V-OTHER-SHOP",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 100,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        }
+      ]
+    },
+    {
+      "product_id": "DEMO-SHOE",
+      "shop_id": "DEMO-SHOP-A",
+      "title": "合成演示不同品类",
+      "category": "shoes",
+      "variants": [
+        {
+          "variant_id": "V-SHOE",
+          "sku": "DEMO-V-SHOE",
+          "observed_at": "2026-11-20T04:00:00+00:00",
+          "price": {
+            "amount_minor": 2000,
+            "currency": "USD",
+            "minor_unit": 2
+          },
+          "attributes": {
+            "material": "cotton",
+            "size": "M",
+            "cotton_percentage": 100
+          },
+          "publication": {
+            "market": "US",
+            "channel": "demo_storefront",
+            "published": true
+          },
+          "availability": {
+            "available_for_sale": true,
+            "inventory_tracked": true,
+            "sellable_quantity": 5
+          }
+        }
+      ]
+    }
+  ]
+}

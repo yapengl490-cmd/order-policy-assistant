@@ -519,13 +519,24 @@ def _reconcile_order_conditions(message: str, previous: dict | None, now: dateti
 
 
 def reconcile_conditions(message: str, previous: dict | None, now: datetime, turn_id: str) -> dict:
-    """按明确业务路由，售后自述与金额条件不互相污染。"""
-    from support_conditions import uses_support, reconcile_support
+    """先分业务，再继承同业务条件；泛政策不要求订单，具体售后必须查订单。"""
+    from support_conditions import uses_support, reconcile_support, _request_text
+    from shopify_chat import uses_shopify, reconcile_shopify
+    if uses_shopify(message, previous):
+        return reconcile_shopify(message, previous, now, turn_id)
+    from general_policy_conditions import uses_general_policy, reconcile_general_policy, has_order_reference
+    from catalog_conditions import uses_catalog, reconcile_catalog
+    text = _request_text(message)
+    # 明确查店铺规则优先于“品类+退货”导购线索，不能反问商品预算。
+    if uses_general_policy(message, previous):
+        return reconcile_general_policy(message, previous, now, turn_id)
+    if not has_order_reference(text) and uses_catalog(message, previous):
+        return reconcile_catalog(message, previous, now, turn_id)
     if uses_support(message, previous):
         return reconcile_support(message, previous, now, turn_id)
-    was_support = bool(previous and previous.get("kind") == "support")
-    result = _reconcile_order_conditions(message, None if was_support else previous, now, turn_id)
-    if was_support:
+    was_separate = bool(previous and previous.get("kind") in {"support", "catalog", "general_policy", "shopify_order", "shopify_policy"})
+    result = _reconcile_order_conditions(message, None if was_separate else previous, now, turn_id)
+    if was_separate:
         result["switched"] = True
         result["revision"] = previous.get("revision", 0) + 1
     return result
@@ -594,4 +605,5 @@ def public_condition_state(state: dict) -> dict:
     keys = ("revision", "kind", "business_timezone", "confirmed", "defaults", "missing", "issues",
             "ready", "needs_clarification", "clarification", "changed", "reset", "expired", "switched", "new_query")
     return {**{key: deepcopy(state[key]) for key in keys},
+            **({"topics": deepcopy(state.get("topics", []))} if state.get("kind") == "general_policy" else {}),
             **({"claims": deepcopy(state.get("claims", {})), "topics": state.get("topics", []), "support_missing": state.get("support_missing", [])} if state.get("kind") == "support" else {})}

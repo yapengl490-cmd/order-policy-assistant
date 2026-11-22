@@ -61,6 +61,13 @@ def run_multi_agent(settings, engine, message, buyer_id, history, should_cancel,
     agent_runner / transport / handlers只用于隔离测试，正式服务使用真实run_agent。
     """
     runner = agent_runner or run_agent
+    if isinstance(condition_state, dict) and condition_state.get("kind") == "support":
+        # 政策读取依赖本次授权订单事实，不进入下方的独立并行分支。
+        from support_collaboration import run_support_collaboration
+        return run_support_collaboration(settings, engine, message, buyer_id, history, should_cancel,
+            access_role=access_role, shop_id=shop_id, transport=transport, tool_handlers=tool_handlers,
+            condition_state=condition_state, historical_evidence=historical_evidence,
+            preference_snapshot=preference_snapshot)
     started = time.monotonic()
     budget = ExecutionBudget(settings, should_cancel)
     common = {"access_role": access_role, "shop_id": shop_id, "transport": transport,

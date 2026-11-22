@@ -9,7 +9,7 @@ import secrets
 
 ROOT = Path(__file__).resolve().parent
 # 允许项不是账号授权：新范围仍须同时有access角色绑定及独立协议凭据。
-ALLOWED_SCOPE_KEYS = frozenset({"buyer:B001", "buyer:B002", "merchant:S001", "merchant:S_UCI_DEMO"})
+ALLOWED_SCOPE_KEYS = frozenset({"buyer:B001", "buyer:B002", "merchant:S001", "merchant:S_UCI_DEMO", "merchant:S_BATCH_1000"})
 
 
 def _authorized_scopes(root: Path) -> set[str]:

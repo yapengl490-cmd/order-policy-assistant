@@ -19,6 +19,9 @@ def run_checks():
     from buyer_support_service import check_buyer_support, get_support_context
     from policy_kb import search_policy_chunks
     from refund_investigation import investigate_refund_increase
+    from general_policy import lookup_general_policy, render_general_policy
+    from catalog_recommendations import CatalogScope, CatalogSnapshot, recommend
+    from catalog_policy import check_catalog_policy
     from mcp_order_client import OrderProtocolClient
     from sqlalchemy import text
     expected = json.loads((ROOT/'samples/support/expected.json').read_text())
@@ -52,10 +55,26 @@ def run_checks():
         with engine.connect() as connection:
             counts = {table: connection.scalar(text('SELECT count(*) FROM public.'+table)) for table in
                 ('buyers','orders','refunds','policy_documents','policy_chunks','order_support_facts','refund_reason_records')}
-            checks['policy_documents_and_whole_clause_chunks'] = counts['policy_documents'] == 2 and counts['policy_chunks'] == 6
+            checks['policy_documents_and_whole_clause_chunks'] = counts['policy_documents'] == 3 and counts['policy_chunks'] == 9
             checks['readonly_database_role'] = all(not connection.scalar(text(
                 "SELECT has_table_privilege(current_user, :name, 'INSERT,UPDATE,DELETE')"), {'name':table})
                 for table in ('orders','refunds','policy_documents','policy_chunks','order_support_facts'))
+        policy_at = datetime.fromisoformat('2026-11-20T12:00:00+08:00')
+        general = lookup_general_policy(engine, store_id='S001', category='ordinary_shoes', policy_at=policy_at)
+        checks['general_policy_without_order'] = (general['status'] == 'ok'
+            and general['order_eligibility'] == 'not_evaluated' and general['policy_version'] == '2026-11-v1'
+            and '定制商品不适用' in render_general_policy(general, {'answer_style':'brief'}))
+        catalog = CatalogSnapshot.load(ROOT/'samples/catalog_policy_demo.json')
+        products = recommend(catalog, {'category':'t_shirt', 'currency':'USD', 'budget_max_minor':3000,
+            'material':'cotton', 'size':'M', 'require_returnable':True},
+            scope=CatalogScope(frozenset({'DEMO-SHOP-A'}), 'US', 'demo_storefront'),
+            as_of=datetime.fromisoformat(catalog.data()['snapshot_at']),
+            policy_lookup=lambda **scope: check_catalog_policy(engine, **scope))
+        checks['synthetic_catalog_linked_to_policy'] = (products['status'] == 'matched'
+            and [item['variant_id'] for item in products['candidates']] == ['V-A']
+            and products['candidates'][0]['price']['amount_minor'] == 2500
+            and products['candidates'][0]['price']['currency'] == 'USD'
+            and bool(products.get('return_policies')))
         order = OrderProtocolClient('buyer:B001').check_order(order_id='O001', refund_before='2026-11-03T00:00:00+08:00')
         checks['real_internal_protocol_order'] = order['status'] == 'ok' and order['net_amount_fen'] == 8500
         token = json.loads((ROOT/'local/access.json').read_text())['accounts'][0]['token']
