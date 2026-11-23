@@ -12,7 +12,7 @@ import re
 import time
 import httpx
 from sqlalchemy.exc import SQLAlchemyError
-from agent_runtime import _history_pairs,_preference_memory
+from runtime_context import history_pairs, preference_memory
 from condition_state import validate_tool_arguments,ConditionValidationError
 from execution_budget import ExecutionBudget
 from snapshot_sql import load_authorized_snapshot,execute_snapshot_sql,SnapshotError,SCHEMA
@@ -22,7 +22,7 @@ def run_snapshot_sql(settings,engine,message,buyer_id,history,should_cancel,*,ac
                      transport=None,tool_handlers=None,condition_state=None,historical_evidence=None,
                      preference_snapshot=None,shared_budget=None,specialist=None):
     started=time.monotonic();budget=shared_budget or ExecutionBudget(settings,should_cancel)
-    memory=_preference_memory(preference_snapshot,access_role,message)
+    memory=preference_memory(preference_snapshot,access_role,message)
     trace=[];facts=[];validation={"syntax":"not_checked","execution":"not_run","metric":"not_checked"}
     usage=dict.fromkeys(("model_requests","tool_calls","input_tokens","output_tokens","total_tokens","unmetered_requests"),0)
     secret=str(settings.model_api_key or "")
@@ -35,7 +35,7 @@ def run_snapshot_sql(settings,engine,message,buyer_id,history,should_cancel,*,ac
         return value
     def finish(status,answer):
         answer=redact(answer)
-        return {"status":status,"answer":answer,"history":redact(_history_pairs((history or [])+[{"role":"user","content":message},{"role":"assistant","content":answer}])),
+        return {"status":status,"answer":answer,"history":redact(history_pairs((history or [])+[{"role":"user","content":message},{"role":"assistant","content":answer}])),
                 "facts":redact(facts),"trace":redact(trace),"usage":usage,"budget":budget.snapshot(),
                 "memory":deepcopy(memory),"condition_state":redact(deepcopy(condition_state)),
                 "historical_evidence":[],"sql_validation":redact(deepcopy(validation)),

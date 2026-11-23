@@ -15,7 +15,8 @@ from zoneinfo import ZoneInfo
 
 import httpx
 
-from agent_runtime import SCHEMAS, _default_handlers, _history_pairs, _owned_result, _preference_memory, _tools_for_role
+from agent_runtime import SCHEMAS, _default_handlers, _owned_result, _tools_for_role
+from runtime_context import history_pairs, preference_memory
 from execution_budget import ExecutionBudget
 from program_executor import execute_program, program_execution_capability
 from program_worker import ProgramError, bounded_json, validate_source
@@ -56,7 +57,7 @@ def run_programmatic_agent(settings, engine, message, buyer_id, history, should_
              "output_tokens": 0, "total_tokens": 0, "unmetered_requests": 0}
     trace, facts, executions = [], [], []
     capability = None
-    memory = _preference_memory(preference_snapshot, access_role, message)
+    memory = preference_memory(preference_snapshot, access_role, message)
     contract = programmatic_contract(message, condition_state)
     secret = str(settings.model_api_key or "")
 
@@ -77,7 +78,7 @@ def run_programmatic_agent(settings, engine, message, buyer_id, history, should_
                 "answer_semantics_verified": False,
                 "evidence_status": "tool_results_available" if facts else "no_tool_evidence",
                 "historical_evidence": [],
-                "history": _history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}]),
+                "history": history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}]),
                 "orchestration": {"requested": mode, "effective": mode,
                                   "wall_seconds": round(time.monotonic() - started, 6), "branches": []}}
 

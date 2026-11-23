@@ -12,12 +12,12 @@ import json
 import re
 import time
 
-import httpx
 from sqlalchemy.exc import SQLAlchemyError
 
-from agent_runtime import _history_pairs, _preference_memory
+from runtime_context import history_pairs, preference_memory
 from answer_quality import measure_answer
 from execution_budget import ExecutionBudget
+from model_request import request_model_once, decode_unique_json
 from sales_analysis import compare_periods, TOTAL_FIELDS
 
 CONDITION_KEYS = ("first_from", "first_before", "second_from", "second_before", "refund_before")
@@ -309,7 +309,7 @@ def run_period_analysis(settings, engine, message, buyer_id, history, should_can
                         preference_snapshot=None, shared_budget=None, specialist=None, period_conditions=None):
     started = time.monotonic()
     budget = shared_budget or ExecutionBudget(settings, should_cancel)
-    memory = _preference_memory(preference_snapshot, access_role, message if isinstance(message, str) else "")
+    memory = preference_memory(preference_snapshot, access_role, message if isinstance(message, str) else "")
     values = memory.get("effective_values", {})
     trace, facts, catalog = [], [], {}
     usage = dict.fromkeys(("model_requests", "tool_calls", "input_tokens", "output_tokens", "total_tokens", "unmetered_requests"), 0)
@@ -333,7 +333,7 @@ def run_period_analysis(settings, engine, message, buyer_id, history, should_can
 
     def finish(status, answer):
         return {"status": status, "answer": redact(answer), "fixed_answer": fixed_answer,
-            "history": redact(_history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}])),
+            "history": redact(history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}])),
             "facts": redact(facts), "trace": redact(trace), "usage": usage, "budget": budget.snapshot(),
             "memory": deepcopy(memory), "condition_state": None, "analysis_conditions": deepcopy(normalized),
             "analysis_evidence": redact(catalog), "analysis_validation": deepcopy(validation),
@@ -459,38 +459,9 @@ def run_period_analysis(settings, engine, message, buyer_id, history, should_can
             return stopped
         if attempt > 1:
             validation["repair_attempted"] = True
-        usage["model_requests"] += 1
-        usage["unmetered_requests"] += 1
-        event = {"stage": "model", "request_number": usage["model_requests"], "request": deepcopy(payload)}
-        stamp = begin(event)
-        body = None
-        try:
-            with httpx.Client(transport=transport, timeout=settings.model_timeout_seconds, trust_env=False,
-                              follow_redirects=False) as client:
-                response = client.post(settings.model_base_url.rstrip("/") + "/chat/completions",
-                    headers={"Authorization": "Bearer " + secret}, json=payload,
-                    timeout=max(.001, min(settings.model_timeout_seconds, budget.remaining_seconds())))
-                event["http_status"] = response.status_code
-                if len(response.content) > MAX_RESPONSE_BYTES:
-                    event.update(error_category="response_size_limit", response_bytes=len(response.content),
-                                 response_sha256=hashlib.sha256(response.content).hexdigest())
-                else:
-                    try:
-                        body = response.json()
-                        event["response"] = deepcopy(body)
-                    except ValueError:
-                        event["raw_response"] = response.text
-                    response.raise_for_status()
-        except (httpx.HTTPError, ValueError) as error:
-            event.update(error_type=type(error).__name__, error_category="model_request_failed")
-        finally:
-            end(event, stamp)
-        raw_usage = body.get("usage", {}) if isinstance(body, dict) else {}
-        if isinstance(raw_usage, dict) and type(raw_usage.get("total_tokens")) is int and raw_usage["total_tokens"] >= 0:
-            usage["unmetered_requests"] -= 1
-            for local, remote in (("input_tokens", "prompt_tokens"), ("output_tokens", "completion_tokens"), ("total_tokens", "total_tokens")):
-                if type(raw_usage.get(remote)) is int and raw_usage[remote] >= 0:
-                    usage[local] += raw_usage[remote]
+        body, event = request_model_once(settings, payload, secret=secret, transport=transport,
+            remaining_seconds=budget.remaining_seconds, usage=usage, request_number=usage["model_requests"] + 1,
+            begin=begin, end=end, max_response_bytes=MAX_RESPONSE_BYTES)
         stopped = stop()
         if stopped:
             return stopped
@@ -506,14 +477,7 @@ def run_period_analysis(settings, engine, message, buyer_id, history, should_can
             content = reply["content"]
             if not isinstance(content, str):
                 raise ValueError
-            def unique(pairs):
-                out = {}
-                for key, item in pairs:
-                    if key in out:
-                        raise ValueError
-                    out[key] = item
-                return out
-            decoded = json.loads(content, object_pairs_hook=unique)
+            decoded = decode_unique_json(content)
             answer, errors = _validate_model_answer(decoded, catalog, values)
         except (KeyError, IndexError, TypeError, ValueError, InvalidOperation):
             answer, errors = None, ["model_structure_or_completion_invalid"]

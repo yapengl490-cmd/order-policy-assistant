@@ -9,7 +9,8 @@ from copy import copy, deepcopy
 from dataclasses import is_dataclass, replace
 import time
 
-from agent_runtime import run_agent, _history_pairs
+from agent_runtime import run_agent
+from runtime_context import history_pairs
 from execution_budget import ExecutionBudget
 from answer_quality import measure_answer
 
@@ -159,7 +160,7 @@ def run_multi_agent(settings, engine, message, buyer_id, history, should_cancel,
     usage["usage_incomplete"] = bool(missing_models or any(item["reason"] == "branch_exception" for item in outcomes))
     usage["token_totals_are_lower_bound"] = bool(usage["usage_incomplete"] or usage["unmetered_requests"])
     result = {"status": status, "answer": answer,
-        "history": _history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}]),
+        "history": history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}]),
         "facts": facts, "trace": trace, "usage": usage, "budget": budget_snapshot,
         "condition_state": deepcopy(condition_state), "historical_evidence": results[0].get("historical_evidence", []),
         "memory": results[0].get("memory"), "answer_semantics_verified": False,

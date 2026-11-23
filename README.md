@@ -139,7 +139,7 @@ python3 demo.py down
 | 订单售后与政策依据 | [`app_server.py`](app_server.py) → [`support_runtime.py`](support_runtime.py) → [`buyer_support_service.py`](buyer_support_service.py) → [`policy_kb.py`](policy_kb.py) → [`support_claims.py`](support_claims.py) |
 | 退款增加与原因证据 | [`sales_analysis.py`](sales_analysis.py) → [`refund_investigation.py`](refund_investigation.py) → [`refund_investigation_runtime.py`](refund_investigation_runtime.py) |
 
-`tests/` 保存回归检查；多智能体、短程序、快照 SQL 及平台连接是有限对照或可选入口，可按需阅读。当前源码仍主要平铺在根目录，公共执行辅助代码还有可整理空间。
+`tests/` 保存回归检查；多智能体、短程序、快照 SQL 及平台连接是有限对照或可选入口，可按需阅读。当前源码仍主要平铺在根目录。历史与偏好处理、分析与调查的单次模型请求已分别集中到公共模块；业务重试、证据判断和回退仍由各入口控制。
 
 - Python、FastAPI（网页接口框架）、Pydantic（类型与结构校验）、SQLAlchemy（数据库访问）及 PostgreSQL（关系数据库）保存结构化事实；SQL 参数绑定和授权过滤由程序实现。
 - 小政策库把条款文本/元数据/可选向量保存在 PostgreSQL（关系数据库），按有限候选做精确计算。当前初始化九个片段，无需专用向量数据库；无默认重排序模型。
@@ -149,6 +149,8 @@ python3 demo.py down
 ```text
 app_server.py / serve.py        接口、授权、任务入口
 agent_runtime.py               单模型工具循环与共享执行边界
+runtime_context.py             共用历史裁剪、可信偏好与本次覆盖
+model_request.py               分析/调查共用单次模型请求、计量与严格JSON解码
 condition_state.py             查询条件来源、更新与澄清
 support_conditions.py          售后意图与用户自述
 buyer_support_service.py       订单事实和售后规则

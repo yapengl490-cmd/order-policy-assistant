@@ -10,11 +10,10 @@ import json
 import re
 import time
 
-import httpx
-
-from agent_runtime import _history_pairs, _preference_memory
+from runtime_context import history_pairs, preference_memory
 from answer_quality import measure_answer
 from execution_budget import ExecutionBudget
+from model_request import request_model_once, decode_unique_json
 from period_analysis_runtime import _comparison_valid, _money, validate_period_conditions
 from refund_investigation import BUCKETS, investigate_refund_increase
 
@@ -171,7 +170,7 @@ def run_refund_investigation(settings, engine, message, buyer_id, history, shoul
                             preference_snapshot=None, shared_budget=None, specialist=None, period_conditions=None):
     started = time.monotonic()
     budget = shared_budget or ExecutionBudget(settings, should_cancel)
-    memory = _preference_memory(preference_snapshot, access_role, message if isinstance(message, str) else "")
+    memory = preference_memory(preference_snapshot, access_role, message if isinstance(message, str) else "")
     values = memory.get("effective_values", {})
     facts, trace, evidence, pending_options = [], [], {}, {}
     usage = dict.fromkeys(("model_requests", "tool_calls", "input_tokens", "output_tokens", "total_tokens", "unmetered_requests"), 0)
@@ -190,7 +189,7 @@ def run_refund_investigation(settings, engine, message, buyer_id, history, shoul
         return value
     def finish(status, answer):
         return {"status": status, "answer": redact(answer), "fixed_answer": fixed,
-            "history": redact(_history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}])),
+            "history": redact(history_pairs((history or []) + [{"role": "user", "content": message}, {"role": "assistant", "content": answer}])),
             "facts": redact(facts), "trace": redact(trace), "usage": usage, "budget": budget.snapshot(),
             "memory": deepcopy(memory), "condition_state": None, "analysis_conditions": deepcopy(normalized),
             "analysis_evidence": redact(evidence), "analysis_validation": deepcopy(validation),
@@ -293,36 +292,9 @@ def run_refund_investigation(settings, engine, message, buyer_id, history, shoul
         if stopped:
             return stopped
         validation["repair_attempted"] = attempt > 1
-        usage["model_requests"] += 1
-        usage["unmetered_requests"] += 1
-        event = {"stage": "model", "request_number": attempt, "request": deepcopy(payload)}
-        stamp, body = begin(event), None
-        try:
-            with httpx.Client(transport=transport, timeout=settings.model_timeout_seconds, trust_env=False, follow_redirects=False) as client:
-                response = client.post(settings.model_base_url.rstrip("/") + "/chat/completions",
-                    headers={"Authorization": "Bearer " + secret}, json=payload,
-                    timeout=max(.001, min(settings.model_timeout_seconds, budget.remaining_seconds())))
-                event["http_status"] = response.status_code
-                if len(response.content) > MAX_RESPONSE_BYTES:
-                    event.update(error_category="response_size_limit", response_bytes=len(response.content),
-                                 response_sha256=hashlib.sha256(response.content).hexdigest())
-                else:
-                    try:
-                        body = response.json()
-                        event["response"] = deepcopy(body)
-                    except ValueError:
-                        event["raw_response"] = response.text
-                    response.raise_for_status()
-        except (httpx.HTTPError, ValueError) as error:
-            event.update(error_type=type(error).__name__, error_category="model_request_failed")
-        finally:
-            end(event, stamp)
-        raw_usage = body.get("usage", {}) if isinstance(body, dict) else {}
-        if isinstance(raw_usage, dict) and type(raw_usage.get("total_tokens")) is int and raw_usage["total_tokens"] >= 0:
-            usage["unmetered_requests"] -= 1
-            for local, remote in (("input_tokens", "prompt_tokens"), ("output_tokens", "completion_tokens"), ("total_tokens", "total_tokens")):
-                if type(raw_usage.get(remote)) is int and raw_usage[remote] >= 0:
-                    usage[local] += raw_usage[remote]
+        body, event = request_model_once(settings, payload, secret=secret, transport=transport,
+            remaining_seconds=budget.remaining_seconds, usage=usage, request_number=attempt,
+            begin=begin, end=end, max_response_bytes=MAX_RESPONSE_BYTES)
         stopped = stop()
         if stopped:
             return stopped
@@ -338,14 +310,7 @@ def run_refund_investigation(settings, engine, message, buyer_id, history, shoul
             content = reply["content"]
             if not isinstance(content, str):
                 raise ValueError("content must be text")
-            def unique(pairs):
-                out = {}
-                for key, item in pairs:
-                    if key in out:
-                        raise ValueError("duplicate key")
-                    out[key] = item
-                return out
-            decoded = json.loads(content, object_pairs_hook=unique)
+            decoded = decode_unique_json(content)
             errors = _validate_selection(decoded, evidence, pending_options)
         except (KeyError, IndexError, TypeError, ValueError):
             errors = ["model_structure_or_completion_invalid"]

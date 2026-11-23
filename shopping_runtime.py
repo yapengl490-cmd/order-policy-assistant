@@ -84,7 +84,7 @@ def validate_selection(body, fact, kind):
 def run_shopping_agent(settings, engine, message, buyer_id, history, should_cancel, *,
                        access_role='buyer',shop_id=None,condition_state=None,transport=None,
                        tool_handlers=None,shared_budget=None,platform_context=None,preference_snapshot=None,**unused):
-    from agent_runtime import _history_pairs, _preference_memory
+    from runtime_context import history_pairs, preference_memory
     from condition_state import public_condition_state
     from general_policy import lookup_general_policy,render_general_policy
     from catalog_conditions import catalog_requirements
@@ -92,13 +92,13 @@ def run_shopping_agent(settings, engine, message, buyer_id, history, should_canc
     from support_runtime import check_policy_references, policy_lifecycle_blocks, policy_lifecycle_stop_answer
     state=deepcopy(condition_state or {})
     # 只合并创建任务时的可信快照与本次展示要求；运行期间不重读、不回写长期库。
-    memory=_preference_memory(preference_snapshot,access_role,message)
+    memory=preference_memory(preference_snapshot,access_role,message)
     display=deepcopy(memory['effective_values'])
     budget=shared_budget or ExecutionBudget(settings,should_cancel)
     facts=[];trace=[];usage={k:0 for k in ('model_requests','tool_calls','input_tokens','output_tokens','total_tokens','unmetered_requests')}
     def finish(status,answer,validation=None):
         return {'status':status,'answer':answer,'facts':deepcopy(facts),'trace':trace,'usage':usage,'budget':budget.snapshot(),
-                'condition_state':state,'history':_history_pairs((history or [])+[{'role':'user','content':message},{'role':'assistant','content':answer}]),
+                'condition_state':state,'history':history_pairs((history or [])+[{'role':'user','content':message},{'role':'assistant','content':answer}]),
                 'answer_semantics_verified':False,'evidence_status':'tool_results_available' if facts else 'no_tool_evidence',
                 'memory':deepcopy(memory),
                 'presentation':{'answer_style':answer_style(display),'renderer':'program_from_verified_facts',

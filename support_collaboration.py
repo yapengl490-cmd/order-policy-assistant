@@ -87,7 +87,7 @@ def lookup_frozen_policy_evidence(engine, context, result, *, should_cancel=lamb
 def run_support_collaboration(settings, engine, message, buyer_id, history, should_cancel, *,
         access_role='buyer', shop_id=None, transport=None, tool_handlers=None, condition_state=None,
         historical_evidence=None, preference_snapshot=None, shared_budget=None, **unused):
-    from agent_runtime import _history_pairs, _preference_memory
+    from runtime_context import history_pairs, preference_memory
     from answer_quality import measure_answer
     from buyer_support_service import get_support_context
     from support_runtime import (review_support_context, expected_decision, check_policy_references,
@@ -95,7 +95,7 @@ def run_support_collaboration(settings, engine, message, buyer_id, history, shou
     from support_claims import build_support_claim_catalog, validate_support_claims, render_support_claims, fallback_support_claims
     from support_context import compact_support_tool_view
     state = deepcopy(condition_state or {})
-    memory = _preference_memory(preference_snapshot, access_role, message)
+    memory = preference_memory(preference_snapshot, access_role, message)
     budget = shared_budget or ExecutionBudget(settings, should_cancel)
     usage = {key: 0 for key in USAGE_KEYS}
     facts, trace, attempts, loaded_skills = [], [], [], []
@@ -116,7 +116,7 @@ def run_support_collaboration(settings, engine, message, buyer_id, history, shou
             if branch['status'] == 'pending': branch['status'] = 'skipped'
         output = {'status': status, 'answer': answer, 'facts': deepcopy(facts), 'trace': safe(trace), 'usage': deepcopy(usage),
             'budget': budget.snapshot(), 'memory': deepcopy(memory), 'historical_evidence': [], 'condition_state': state,
-            'history': _history_pairs((history or []) + [{'role': 'user', 'content': message}, {'role': 'assistant', 'content': answer}]),
+            'history': history_pairs((history or []) + [{'role': 'user', 'content': message}, {'role': 'assistant', 'content': answer}]),
             'evidence_status': ('partial_tool_results' if status in {'partial', 'failed', 'limited', 'cancelled'} else 'tool_results_available') if facts else 'no_tool_evidence',
             'answer_semantics_verified': False, 'skills': deepcopy(loaded_skills),
             'orchestration': {'requested': 'multi', 'effective': 'dependent', 'branches': deepcopy(branches),
