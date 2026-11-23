@@ -6,6 +6,35 @@
 
 当前版本含商品推荐、泛政策查询、售后顺序协作、新入口偏好，以及受控政策撤回/更正和历史依据状态核对。各项实际验证与限制见[验收记录](docs/validation.md)。
 
+## 一次售后查询长什么样
+
+同一笔合成订单 `O_SUPPORT_OK`：**用户提问 → 读取授权订单 → 匹配适用政策 → 输出带依据的结论**。
+
+以下是公开前端组件的局部截图：使用一份已保存的合成任务结果脱敏重放，额外添加步骤标题、展开滚动区便于阅读；不是本次重新调用模型，也不是线上店铺订单。问题、回答与引用原文保持一致，订单工具图仅保留本例的合成业务字段，移除了本机路径和运行标识。默认免费演示可核对事实与规则；生成新的聊天回答仍需自行启用模型配置。
+
+**1. 提问：同时给出订单、判断时刻、商品状态和退货原因。** “未穿着、吊牌完好”属于用户自述，需要与后台事实区分。
+
+![用户提出退货资格与运费问题，下方可查看条件来源](docs/images/01-question.png)
+
+<details>
+<summary>2–3. 展开查看：程序实际读取了哪些订单事实和政策条款？</summary>
+
+**2. 订单事实：** 当前买家只读本人订单，得到支付时刻、收货时刻、品类与定制状态；这些是演示数据库中的合成记录。
+
+![订单工具返回授权范围、支付时刻、收货时刻和合成来源标识](docs/images/02-order-facts.png)
+
+**3. 适用政策：** 根据店铺、品类和订单支付时刻匹配11月版本。退货资格、定制例外与运费分别有条款支持；可按文件与行号回查[完整演示政策](knowledge/2026-11-shoes.md)。
+
+![政策原文分别展示退货资格、适用范围和退货运费条款及行号](docs/images/03-policy-evidence.png)
+
+</details>
+
+**4. 交付结论：** 同时保留期限、必要条件、例外、未核实事实及引用。页面说明“仍需售后核验”，不会把回答当成退货批准或执行退款。
+
+![带依据的完整回答，包含资格、条件、例外、截止时间、运费和只读边界](docs/images/04-cited-answer.png)
+
+想复现规则核查，可从下方[免费启动步骤](#快速开始无模型无付费请求)运行 `demo.py check`，固定观察时刻和预期见[合成售后样例](samples/support/expected.json)。
+
 ## 能做什么
 
 | 功能 | 当前实现与边界 |
@@ -101,6 +130,16 @@ python3 demo.py down
 以上只管理本 Compose（多服务管理）项目的网页、协议服务、数据库和初始化容器，不停止其他 Docker（容器运行环境）项目。该默认部署没有动态执行容器权限；若另行使用 Mac 本机短程序模式，须核查遗留动态任务容器。**不要加 `-v`，不要删除 `database` / `runtime` 卷**，否则会丢失数据或凭据。退出整个 Docker Desktop 会影响其他容器项目。
 
 ## 技术选择与目录
+
+第一次读代码可先沿一条业务链走，不必同时阅读所有运行器：
+
+| 想了解什么 | 建议阅读顺序 |
+|---|---|
+| 启动与免费验收 | [`demo.py`](demo.py) → [`deploy_init.py`](deploy_init.py) → [`demo_check.py`](demo_check.py) |
+| 订单售后与政策依据 | [`app_server.py`](app_server.py) → [`support_runtime.py`](support_runtime.py) → [`buyer_support_service.py`](buyer_support_service.py) → [`policy_kb.py`](policy_kb.py) → [`support_claims.py`](support_claims.py) |
+| 退款增加与原因证据 | [`sales_analysis.py`](sales_analysis.py) → [`refund_investigation.py`](refund_investigation.py) → [`refund_investigation_runtime.py`](refund_investigation_runtime.py) |
+
+`tests/` 保存回归检查；多智能体、短程序、快照 SQL 及平台连接是有限对照或可选入口，可按需阅读。当前源码仍主要平铺在根目录，公共执行辅助代码还有可整理空间。
 
 - Python、FastAPI（网页接口框架）、Pydantic（类型与结构校验）、SQLAlchemy（数据库访问）及 PostgreSQL（关系数据库）保存结构化事实；SQL 参数绑定和授权过滤由程序实现。
 - 小政策库把条款文本/元数据/可选向量保存在 PostgreSQL（关系数据库），按有限候选做精确计算。当前初始化九个片段，无需专用向量数据库；无默认重排序模型。
